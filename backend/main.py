@@ -1,11 +1,13 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 import httpx
 import json
 import os
+import secrets
 from collections import defaultdict
 from fastapi.security import OAuth2PasswordRequestForm
 from backend.auth import get_password_hash, verify_password, create_access_token, get_current_user, verify_ws_token
@@ -13,10 +15,38 @@ from backend.database import get_db, Character, ChatMessage, User, Campaign
 from backend.rag import retrieve_relevant_rules
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://host.docker.internal:11434")
 MODEL_NAME = "phi4-mini:3.8b-q4_K_M"
+
+@app.on_event("startup")
+def startup_event():
+    from backend.rag import ingest_rulebook, rules_collection
+    import os
+    import httpx
+    
+    os.environ["ANONYMIZED_TELEMETRY"] = "False"
+    
+    if rules_collection.count() == 0:
+        if os.path.exists("core_rules.txt"):
+            with open("core_rules.txt", "r", encoding="utf-8") as f:
+                try:
+                    ingest_rulebook(f.read())
+                    print("Successfully ingested core_rules.txt into ChromaDB.")
+                except httpx.ConnectError:
+                    print("CRITICAL WARNING: Could not connect to Ollama at startup. RAG ingestion failed.")
+        else:
+            print("Warning: core_rules.txt not found.")
 
 class RoomManager:
     def __init__(self):
@@ -52,7 +82,6 @@ class RoomManager:
 
 room_manager = RoomManager()
 
-# --- Schemas ---
 class ChatRequest(BaseModel):
     campaign_id: int
     message: str
@@ -76,7 +105,6 @@ class CampaignCreate(BaseModel):
 async def root():
     return FileResponse("static/index.html")
 
-# --- Auth Routes ---
 @app.post("/api/auth/register")
 def register(user: UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(User).filter(User.username == user.username).first()
@@ -94,12 +122,9 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         raise HTTPException(status_code=400, detail="Incorrect username or password")
     return {"access_token": create_access_token(data={"sub": user.username}), "token_type": "bearer"}
 
-# --- Campaign Routes ---
 @app.post("/api/campaigns")
 def create_campaign(campaign: CampaignCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    # If ai_dm is True, the Human DM slot is left empty (None)
     dm_id = None if campaign.ai_dm else current_user.id
-    
     new_campaign = Campaign(name=campaign.name, dm_id=dm_id)
     db.add(new_campaign)
     db.commit()
@@ -113,7 +138,6 @@ def join_campaign(invite_code: str, current_user: User = Depends(get_current_use
         raise HTTPException(status_code=404, detail="Invalid invite code")
     return {"message": f"Joined campaign {campaign.name}", "campaign_id": campaign.id, "campaign_name": campaign.name}
 
-# NEW: Dashboard Endpoint
 @app.get("/api/campaigns/my")
 def get_my_campaigns(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     dm_campaigns = db.query(Campaign).filter(Campaign.dm_id == current_user.id).all()
@@ -129,7 +153,60 @@ def get_my_campaigns(current_user: User = Depends(get_current_user), db: Session
             results[c.id] = {"id": c.id, "name": c.name, "role": "Player", "invite_code": c.invite_code}
     return list(results.values())
 
-# --- Character Routes ---
+@app.post("/api/campaigns/{campaign_id}/generate-outline")
+async def generate_campaign_outline(campaign_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    characters = db.query(Character).filter(Character.campaign_id == campaign_id).all()
+    
+    party_desc = "\n".join([f"- {c.name} ({c.stats.get('char_class', 'Unknown')}): {c.backstory}" for c in characters])
+    prompt = f"""You are an expert Dungeon Master creating a new D&D campaign named '{campaign.name}'.
+    The party consists of:
+    {party_desc}
+    
+    Write a concise, 3-act story outline with 3 planned combat encounters. Do not reveal this to the players. This is your DM notes."""
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(
+                f"{OLLAMA_URL}/api/generate", 
+                json={"model": MODEL_NAME, "prompt": prompt, "stream": False}, 
+                timeout=120.0
+            )
+            response.raise_for_status()
+            outline = response.json().get("response", "Default Outline.")
+        except Exception as e:
+            outline = f"Failed to generate outline: {str(e)}"
+            
+    campaign.story_outline = outline
+    db.commit()
+    return {"message": "Outline generated successfully", "outline": outline}
+
+@app.post("/api/upload-rules")
+async def upload_rules(file: UploadFile = File(...), current_user: User = Depends(get_current_user)):
+    content = await file.read()
+    
+    try:
+        if file.filename.endswith('.pdf'):
+            import PyPDF2
+            import io
+            pdf_reader = PyPDF2.PdfReader(io.BytesIO(content))
+            text = "\n".join([page.extract_text() for page in pdf_reader.pages if page.extract_text()])
+        else:
+            text = content.decode("utf-8")
+            
+        from langchain_text_splitters import RecursiveCharacterTextSplitter
+        splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
+        chunks = splitter.split_text(text)
+        
+        from backend.rag import rules_collection
+        ids = [f"rule_{secrets.token_hex(4)}" for _ in chunks]
+        if chunks:
+            rules_collection.upsert(documents=chunks, ids=ids)
+            
+        return {"message": f"Ingested {len(chunks)} chunks into rule database."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/api/character")
 def create_character(char: CharCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     db_char = Character(name=char.name, owner_id=current_user.id, campaign_id=char.campaign_id, stats=char.stats, backstory=char.backstory)
@@ -140,7 +217,6 @@ def create_character(char: CharCreate, current_user: User = Depends(get_current_
 
 @app.get("/api/campaigns/{campaign_id}/my-character")
 def get_my_character(campaign_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    # Check if user is the DM. If so, they don't need a character sheet.
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if campaign and campaign.dm_id == current_user.id:
         return {"name": "DM", "role": "DM"}
@@ -154,13 +230,13 @@ def get_my_character(campaign_id: int, current_user: User = Depends(get_current_
 def get_campaign_characters(campaign_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return db.query(Character).filter(Character.campaign_id == campaign_id).all()
 
-# --- WebSocket & AI Chat ---
 @app.websocket("/ws/map/{campaign_id}")
 async def map_socket(websocket: WebSocket, campaign_id: int, token: str, db: Session = Depends(get_db)):
     user = verify_ws_token(token, db)
     if not user:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
+        
     await room_manager.connect(websocket, campaign_id)
     try:
         while True:
@@ -168,21 +244,6 @@ async def map_socket(websocket: WebSocket, campaign_id: int, token: str, db: Ses
             await room_manager.broadcast(json.loads(data), campaign_id)
     except WebSocketDisconnect:
         room_manager.disconnect(websocket, campaign_id)
-
-# Add this near your app = FastAPI() declaration in backend/main.py
-@app.on_event("startup")
-def startup_event():
-    from backend.rag import ingest_rulebook, rules_collection
-    import os
-    
-    # Only ingest if the collection is empty to avoid redundant processing
-    if rules_collection.count() == 0:
-        if os.path.exists("core_rules.txt"):
-            with open("core_rules.txt", "r", encoding="utf-8") as f:
-                ingest_rulebook(f.read())
-            print("Successfully ingested core_rules.txt into ChromaDB.")
-        else:
-            print("Warning: core_rules.txt not found.")
 
 @app.post("/api/chat")
 async def chat(request: ChatRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -195,10 +256,14 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
     stats_str = ", ".join([f"{k.upper()}: {v}" for k, v in char.stats.items()]) if char and char.stats else "Unknown"
     relevant_rules = retrieve_relevant_rules(request.message)
 
+    campaign = db.query(Campaign).filter(Campaign.id == request.campaign_id).first()
+    outline = campaign.story_outline if campaign.story_outline else "No outline set."
+
     system_prompt = f"""You are the Dungeon Master. 
+    Campaign Outline (Keep secret, use to guide events): {outline}
     Rules Context: {relevant_rules}
     Player Sheet: Name: {request.character_name}, {stats_str}, Background: {backstory}
-    Keep response to 2-3 sentences. Describe the outcome taking their specific character stats and modifiers into account."""
+    Keep response to 2-4 sentences. Describe the outcome taking their specific character stats and modifiers into account."""
 
     history = db.query(ChatMessage).filter(ChatMessage.campaign_id == request.campaign_id).order_by(ChatMessage.id.desc()).limit(10).all()
     history.reverse()
