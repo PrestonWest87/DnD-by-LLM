@@ -5,31 +5,36 @@
     <title>AI VTT Engine</title>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; height: 100vh; margin: 0; background: #121212; color: #e0e0e0; }
-        
-        /* --- Screen Overlays --- */
         .screen { display: none; width: 100%; height: 100%; align-items: center; justify-content: center; flex-direction: column; }
         .active-screen { display: flex; }
         
-        /* Base Menu Box */
         .menu-box { background: #1e1e1e; padding: 30px; border-radius: 8px; border: 1px solid #333; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);}
-        .menu-box.small-box { width: 350px; }
-        .menu-box.large-box { width: 500px; }
+        .small-box { width: 350px; } .large-box { width: 550px; }
         
-        /* Inputs & Buttons */
         input[type="text"], input[type="password"], input[type="number"], textarea, select { 
             width: 100%; margin-bottom: 10px; padding: 10px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; box-sizing: border-box;
         }
-        button { width: 100%; padding: 10px; background: #4facfe; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-bottom: 10px; transition: background 0.2s;}
+        button { width: 100%; padding: 10px; background: #4facfe; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-bottom: 10px;}
         button:hover { background: #00f2fe; color: black;}
 
-        /* --- Character Sheet Grid --- */
-        .sheet-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: left; margin-bottom: 15px;}
-        .attr-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; background: #222; padding: 10px; border-radius: 4px; border: 1px solid #444;}
-        .attr-box { text-align: center; }
-        .attr-box label { display: block; font-size: 11px; color: #aaa; font-weight: bold; margin-bottom: 2px;}
-        .attr-box input { text-align: center; font-size: 16px; padding: 5px; margin-bottom: 0;}
+        /* Dashboard Styles */
+        .camp-list-item { background: #2c2c2c; padding: 10px; margin-bottom: 10px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; border-left: 4px solid #4facfe;}
+        .camp-badge { background: #111; padding: 3px 8px; border-radius: 10px; font-size: 11px; color: #ccc;}
+
+        /* Character Rule Engine UI */
+        .sheet-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; text-align: left; margin-bottom: 15px;}
+        .attr-row { display: flex; justify-content: space-between; align-items: center; background: #222; padding: 8px; margin-bottom: 5px; border-radius: 4px; border: 1px solid #444;}
+        .attr-label { width: 40px; font-weight: bold; color: #aaa;}
+        .attr-select { width: 60px; margin: 0; padding: 5px;}
+        .attr-result { width: 60px; text-align: center; font-size: 18px; font-weight: bold; color: #4facfe;}
+        .attr-mod { width: 40px; text-align: right; font-size: 14px; color: #a8e6cf;}
         
-        /* --- VTT Layout --- */
+        .derived-stats { display: flex; justify-content: space-around; background: #181818; padding: 15px; border-radius: 4px; border: 1px solid #333; margin-bottom: 15px;}
+        .d-stat { text-align: center;}
+        .d-val { font-size: 24px; font-weight: bold; color: #fff;}
+        .d-lbl { font-size: 11px; color: #888; text-transform: uppercase;}
+
+        /* VTT Layout */
         #vtt-screen { display: none; width: 100%; height: 100%; flex-direction: row; }
         .panel { padding: 20px; border-right: 1px solid #333; overflow-y: auto; }
         #left-panel { width: 280px; background: #1e1e1e; }
@@ -37,8 +42,6 @@
         #right-panel { width: 350px; background: #1e1e1e; display: flex; flex-direction: column; }
         
         canvas { background: #2b2b2b; border: 2px solid #555; cursor: grab; box-shadow: 0 4px 8px rgba(0,0,0,0.5); }
-        
-        /* Enhanced Character Cards for Sidebar */
         .char-card { background: #2c2c2c; padding: 12px; margin-bottom: 12px; border-radius: 5px; border-left: 4px solid #3498db; font-size: 13px;}
         .char-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; border-bottom: 1px solid #444; padding-bottom: 5px;}
         .char-card-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; text-align: center; font-size: 11px; color: #ccc;}
@@ -48,11 +51,6 @@
         .msg-user { color: #4facfe; margin-bottom: 8px; }
         .msg-ai { color: #a8e6cf; margin-bottom: 8px; }
         .msg-party { color: #f1c40f; margin-bottom: 8px; font-style: italic; }
-        
-        .chat-controls { display: flex; flex-direction: column; gap: 5px; }
-        .chat-input-row { display: flex; gap: 5px; }
-        .chat-input-row input { flex-grow: 1; margin: 0;}
-        .chat-input-row button { margin: 0; width: 80px;}
     </style>
 </head>
 <body>
@@ -70,13 +68,16 @@
 
     <div id="lobby-screen" class="screen">
         <div class="menu-box small-box">
-            <h2>Campaign Lobby</h2>
+            <h2>Your Campaigns</h2>
+            <div id="dashboard-list" style="text-align: left; margin-bottom: 20px; max-height: 200px; overflow-y: auto;">
+                </div>
+
             <hr style="border-color: #333; margin-bottom: 15px;">
             <input type="text" id="new-camp-name" placeholder="New Campaign Name">
             <button onclick="createCampaign()">Create Campaign</button>
             <hr style="border-color: #333; margin: 15px 0;">
             <input type="text" id="join-camp-code" placeholder="Invite Code (e.g., a1b2c3d4)">
-            <button onclick="joinCampaign()" style="background: #27ae60;">Join Campaign</button>
+            <button onclick="joinCampaign()" style="background: #27ae60;">Join with Code</button>
             <div id="lobby-msg" style="color: #f1c40f; margin-top: 10px; font-size: 14px;"></div>
         </div>
     </div>
@@ -84,68 +85,66 @@
     <div id="char-screen" class="screen">
         <div class="menu-box large-box">
             <h2 style="margin-top: 0;">Forge Your Hero</h2>
-            <p style="font-size: 13px; color: #aaa; margin-top: -10px; margin-bottom: 20px;">You must create a character to enter this realm.</p>
+            <p style="font-size: 13px; color: #aaa; margin-top: -10px; margin-bottom: 20px;">Allocate the Standard Array (15, 14, 13, 12, 10, 8)</p>
             
             <div class="sheet-grid">
                 <div>
-                    <label style="font-size: 12px; color: #888;">Name</label>
+                    <label style="font-size: 12px; color: #888;">Identity</label>
                     <input type="text" id="char-name" placeholder="Character Name">
+                    
+                    <label style="font-size: 12px; color: #888;">Race (Determines Bonuses)</label>
+                    <select id="char-race" onchange="calcStats()">
+                        <option value="Human">Human (+1 All)</option>
+                        <option value="Elf">Elf (+2 DEX)</option>
+                        <option value="Dwarf">Dwarf (+2 CON)</option>
+                        <option value="Orc">Orc (+2 STR)</option>
+                    </select>
+
+                    <label style="font-size: 12px; color: #888;">Class (Determines Hit Dice)</label>
+                    <select id="char-class" onchange="calcStats()">
+                        <option value="Fighter">Fighter (d10)</option>
+                        <option value="Rogue">Rogue (d8)</option>
+                        <option value="Wizard">Wizard (d6)</option>
+                    </select>
                 </div>
+
                 <div>
-                    <label style="font-size: 12px; color: #888;">Race</label>
-                    <input type="text" id="char-race" placeholder="e.g., Elf, Dwarf, Human">
-                </div>
-                <div>
-                    <label style="font-size: 12px; color: #888;">Class</label>
-                    <input type="text" id="char-class" placeholder="e.g., Wizard, Fighter">
-                </div>
-                <div style="display: flex; gap: 5px;">
-                    <div style="flex: 1;"><label style="font-size: 12px; color: #888;">Level</label><input type="number" id="char-lvl" value="1"></div>
-                    <div style="flex: 1;"><label style="font-size: 12px; color: #888;">HP</label><input type="number" id="char-hp" value="10"></div>
-                    <div style="flex: 1;"><label style="font-size: 12px; color: #888;">AC</label><input type="number" id="char-ac" value="10"></div>
+                    <label style="font-size: 12px; color: #888; display:block; margin-bottom:5px;">Ability Scores</label>
+                    <div id="attr-container"></div>
                 </div>
             </div>
 
-            <label style="font-size: 12px; color: #888; display: block; text-align: left; margin-bottom: 5px;">Core Attributes</label>
-            <div class="attr-grid">
-                <div class="attr-box"><label>STR</label><input type="number" id="char-str" value="10"></div>
-                <div class="attr-box"><label>DEX</label><input type="number" id="char-dex" value="10"></div>
-                <div class="attr-box"><label>CON</label><input type="number" id="char-con" value="10"></div>
-                <div class="attr-box"><label>INT</label><input type="number" id="char-int" value="10"></div>
-                <div class="attr-box"><label>WIS</label><input type="number" id="char-wis" value="10"></div>
-                <div class="attr-box"><label>CHA</label><input type="number" id="char-cha" value="10"></div>
+            <div class="derived-stats">
+                <div class="d-stat"><div class="d-val" id="disp-hp">10</div><div class="d-lbl">Max HP</div></div>
+                <div class="d-stat"><div class="d-val" id="disp-ac">10</div><div class="d-lbl">Armor Class</div></div>
+                <div class="d-stat"><div class="d-val">1</div><div class="d-lbl">Level</div></div>
             </div>
 
-            <label style="font-size: 12px; color: #888; display: block; text-align: left; margin-top: 15px; margin-bottom: 5px;">Backstory (For the AI DM)</label>
-            <textarea id="char-backstory" placeholder="Describe your background, goals, and personality..." style="height: 80px;"></textarea>
-            
-            <button onclick="submitCharacter()" style="margin-top: 10px;">Enter Campaign</button>
+            <textarea id="char-backstory" placeholder="Brief backstory for the AI DM..." style="height: 60px;"></textarea>
+            <button onclick="submitCharacter()">Enter Campaign</button>
         </div>
     </div>
 
     <div id="vtt-screen">
         <div id="left-panel" class="panel">
-            <h3>Campaign Party</h3>
+            <h3 id="party-header">Campaign Party</h3>
             <div id="char-list"></div>
         </div>
-
         <div id="center-panel" class="panel">
             <h2 id="map-title">Battle Map</h2>
             <canvas id="map" width="600" height="600"></canvas>
         </div>
-
         <div id="right-panel" class="panel">
             <h3>Communication</h3>
             <div id="chat-log"></div>
-            
-            <div class="chat-controls">
-                <select id="chat-type">
+            <div style="display: flex; flex-direction: column; gap: 5px;">
+                <select id="chat-type" style="padding: 10px; background: #222; color: white; border: 1px solid #555; border-radius: 4px;">
                     <option value="action">🎲 Take Action (Triggers DM)</option>
                     <option value="party">💬 Talk to Party (Chat Only)</option>
                 </select>
-                <div class="chat-input-row">
-                    <input type="text" id="chat-input" placeholder="Enter message..." onkeypress="if(event.key === 'Enter') sendChat()">
-                    <button onclick="sendChat()">Send</button>
+                <div style="display: flex; gap: 5px;">
+                    <input type="text" id="chat-input" placeholder="Enter message..." onkeypress="if(event.key === 'Enter') sendChat()" style="margin:0; flex-grow:1;">
+                    <button onclick="sendChat()" style="margin:0; width:80px;">Send</button>
                 </div>
             </div>
         </div>
@@ -157,6 +156,7 @@
         let currentCampaignName = "";
         let myCharacter = null;
         let ws = null;
+        let finalStats = {}; // Holds calculated D&D rules engine stats
 
         async function authFetch(url, options = {}) {
             const token = localStorage.getItem('vtt_token');
@@ -172,49 +172,68 @@
 
         // --- Auth Logic ---
         async function register() {
-            const u = document.getElementById('auth-user').value;
-            const p = document.getElementById('auth-pass').value;
             const res = await fetch('/api/auth/register', {
                 method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({username: u, password: p})
+                body: JSON.stringify({username: document.getElementById('auth-user').value, password: document.getElementById('auth-pass').value})
             });
             if (res.ok) {
                 document.getElementById('auth-msg').innerText = "Registered! Now login.";
                 document.getElementById('auth-msg').style.color = "#2ecc71";
             } else {
-                const data = await res.json();
-                document.getElementById('auth-msg').innerText = data.detail || "Error registering";
+                document.getElementById('auth-msg').innerText = (await res.json()).detail || "Error";
             }
         }
 
         async function login() {
-            const u = document.getElementById('auth-user').value;
-            const p = document.getElementById('auth-pass').value;
-            const formData = new URLSearchParams(); formData.append('username', u); formData.append('password', p);
+            const formData = new URLSearchParams(); 
+            formData.append('username', document.getElementById('auth-user').value); 
+            formData.append('password', document.getElementById('auth-pass').value);
             const res = await fetch('/api/auth/login', {
                 method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: formData
             });
             if (res.ok) {
-                const data = await res.json();
-                localStorage.setItem('vtt_token', data.access_token);
-                showScreen('lobby-screen');
+                localStorage.setItem('vtt_token', (await res.json()).access_token);
+                loadDashboard();
             } else {
                 document.getElementById('auth-msg').innerText = "Invalid credentials";
             }
         }
 
-        if (localStorage.getItem('vtt_token')) showScreen('lobby-screen');
+        if (localStorage.getItem('vtt_token')) loadDashboard();
 
-        // --- Campaign Lobby Logic ---
+        // --- Dashboard Logic ---
+        async function loadDashboard() {
+            showScreen('lobby-screen');
+            const res = await authFetch('/api/campaigns/my');
+            if (res.ok) {
+                const campaigns = await res.json();
+                const list = document.getElementById('dashboard-list');
+                list.innerHTML = '';
+                if (campaigns.length === 0) {
+                    list.innerHTML = '<div style="color:#aaa; font-style:italic;">No campaigns yet. Create or join one!</div>';
+                }
+                campaigns.forEach(c => {
+                    const codeDisp = c.role === 'DM' ? ` <span style="font-size:10px; color:#aaa;">(Code: ${c.invite_code})</span>` : '';
+                    list.innerHTML += `
+                        <div class="camp-list-item">
+                            <div>
+                                <b>${c.name}</b>${codeDisp}<br>
+                                <span class="camp-badge">${c.role}</span>
+                            </div>
+                            <button onclick="enterCampaign(${c.id}, '${c.name}')" style="width: 80px; margin: 0; background: #2ecc71;">Launch</button>
+                        </div>
+                    `;
+                });
+            }
+        }
+
         async function createCampaign() {
             const name = document.getElementById('new-camp-name').value;
             if(!name) return;
             const res = await authFetch('/api/campaigns', {
                 method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: name})
             });
-            const data = await res.json();
-            document.getElementById('lobby-msg').innerText = `Created! Invite Code: ${data.invite_code}`;
-            enterCampaign(data.id, name);
+            loadDashboard();
         }
 
         async function joinCampaign() {
@@ -229,7 +248,73 @@
             }
         }
 
-        // --- Character Generation & Injection ---
+        // --- D&D Rules Engine: Character Generation ---
+        const attributes = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
+        const standardArray = [15, 14, 13, 12, 10, 8];
+        
+        // Build the Attribute Selectors
+        const attrContainer = document.getElementById('attr-container');
+        attributes.forEach(attr => {
+            let options = standardArray.map(val => `<option value="${val}">${val}</option>`).join('');
+            attrContainer.innerHTML += `
+                <div class="attr-row">
+                    <div class="attr-label">${attr}</div>
+                    <select class="attr-select" id="base-${attr}" onchange="calcStats()">${options}</select>
+                    <div class="attr-result" id="res-${attr}">15</div>
+                    <div class="attr-mod" id="mod-${attr}">+2</div>
+                </div>
+            `;
+        });
+
+        function calcStats() {
+            const race = document.getElementById('char-race').value;
+            const charClass = document.getElementById('char-class').value;
+            
+            let raceBonuses = { STR: 0, DEX: 0, CON: 0, INT: 0, WIS: 0, CHA: 0 };
+            if (race === 'Human') attributes.forEach(a => raceBonuses[a] = 1);
+            if (race === 'Elf') raceBonuses['DEX'] = 2;
+            if (race === 'Dwarf') raceBonuses['CON'] = 2;
+            if (race === 'Orc') raceBonuses['STR'] = 2;
+
+            let conMod = 0; let dexMod = 0;
+
+            attributes.forEach(attr => {
+                const base = parseInt(document.getElementById(`base-${attr}`).value);
+                const total = base + raceBonuses[attr];
+                const mod = Math.floor((total - 10) / 2);
+                const modStr = mod >= 0 ? `+${mod}` : `${mod}`;
+                
+                document.getElementById(`res-${attr}`).innerText = total;
+                document.getElementById(`mod-${attr}`).innerText = modStr;
+                
+                finalStats[attr] = total;
+                finalStats[`${attr}_mod`] = modStr;
+
+                if (attr === 'CON') conMod = mod;
+                if (attr === 'DEX') dexMod = mod;
+            });
+
+            // Calculate Base HP
+            let baseHp = 10; // Default Fighter
+            if (charClass === 'Rogue') baseHp = 8;
+            if (charClass === 'Wizard') baseHp = 6;
+            
+            const maxHp = baseHp + conMod;
+            const ac = 10 + dexMod;
+
+            document.getElementById('disp-hp').innerText = maxHp;
+            document.getElementById('disp-ac').innerText = ac;
+
+            finalStats.race = race;
+            finalStats.char_class = charClass;
+            finalStats.level = 1;
+            finalStats.hp = maxHp;
+            finalStats.ac = ac;
+        }
+
+        // Initialize math on load
+        calcStats();
+
         async function enterCampaign(id, name) {
             currentCampaignId = id; currentCampaignName = name;
             const res = await authFetch(`/api/campaigns/${id}/my-character`);
@@ -238,28 +323,16 @@
                 launchVTT();
             } else {
                 showScreen('char-screen');
+                calcStats(); // Refresh sheet
             }
         }
 
         async function submitCharacter() {
-            // Pack all sheet data into the JSON stats object for the backend
             const payload = {
-                name: document.getElementById('char-name').value,
+                name: document.getElementById('char-name').value || "Unnamed Hero",
                 campaign_id: currentCampaignId,
-                stats: {
-                    race: document.getElementById('char-race').value,
-                    char_class: document.getElementById('char-class').value,
-                    level: parseInt(document.getElementById('char-lvl').value),
-                    hp: parseInt(document.getElementById('char-hp').value),
-                    ac: parseInt(document.getElementById('char-ac').value),
-                    str: parseInt(document.getElementById('char-str').value),
-                    dex: parseInt(document.getElementById('char-dex').value),
-                    con: parseInt(document.getElementById('char-con').value),
-                    int: parseInt(document.getElementById('char-int').value),
-                    wis: parseInt(document.getElementById('char-wis').value),
-                    cha: parseInt(document.getElementById('char-cha').value)
-                },
-                backstory: document.getElementById('char-backstory').value
+                stats: finalStats,
+                backstory: document.getElementById('char-backstory').value || "A generic adventurer."
             };
 
             const res = await authFetch('/api/character', {
@@ -272,9 +345,16 @@
             }
         }
 
-        // --- VTT Initialization ---
+        // --- VTT & WebSockets ---
         function launchVTT() {
             document.getElementById('map-title').innerText = `Campaign: ${currentCampaignName}`;
+            
+            // If the user is the DM, change the header to reflect god-mode
+            if (myCharacter.role === 'DM') {
+                document.getElementById('party-header').innerText = "DM Control Panel";
+                document.getElementById('chat-type').innerHTML = `<option value="party">💬 Speak as DM</option>`;
+            }
+
             showScreen('vtt-screen');
             initWebSocket();
             loadParty();
@@ -289,36 +369,33 @@
             
             chars.forEach(c => {
                 const stats = typeof c.stats === 'string' ? JSON.parse(c.stats) : (c.stats || {});
-                const border = c.name === myCharacter.name ? 'border-left: 4px solid #2ecc71;' : 'border-left: 4px solid #3498db;';
+                const border = (myCharacter && c.name === myCharacter.name) ? 'border-left: 4px solid #2ecc71;' : 'border-left: 4px solid #3498db;';
                 
-                // Build a rich Character Card
                 list.innerHTML += `
                     <div class="char-card" style="${border}">
                         <div class="char-card-header">
                             <b style="font-size: 15px;">${c.name}</b>
-                            <span style="color: #aaa;">Lvl ${stats.level || 1} ${stats.race || ''} ${stats.char_class || 'Unknown'}</span>
+                            <span style="color: #aaa;">Lvl ${stats.level || 1} ${stats.race || ''} ${stats.char_class || ''}</span>
                         </div>
                         <div style="margin-bottom: 8px; color: #fff;">
                             ❤️ ${stats.hp || 0} HP &nbsp;&nbsp;|&nbsp;&nbsp; 🛡️ ${stats.ac || 0} AC
                         </div>
                         <div class="char-card-stats">
-                            <div class="stat-badge">STR: ${stats.str || 10}</div>
-                            <div class="stat-badge">DEX: ${stats.dex || 10}</div>
-                            <div class="stat-badge">CON: ${stats.con || 10}</div>
-                            <div class="stat-badge">INT: ${stats.int || 10}</div>
-                            <div class="stat-badge">WIS: ${stats.wis || 10}</div>
-                            <div class="stat-badge">CHA: ${stats.cha || 10}</div>
+                            <div class="stat-badge">STR: ${stats.STR || 10}</div>
+                            <div class="stat-badge">DEX: ${stats.DEX || 10}</div>
+                            <div class="stat-badge">CON: ${stats.CON || 10}</div>
+                            <div class="stat-badge">INT: ${stats.INT || 10}</div>
+                            <div class="stat-badge">WIS: ${stats.WIS || 10}</div>
+                            <div class="stat-badge">CHA: ${stats.CHA || 10}</div>
                         </div>
                     </div>
                 `;
             });
         }
 
-        // --- Map & WebSocket Handling ---
         const canvas = document.getElementById('map');
         const ctx = canvas.getContext('2d');
-        let tokens = {};
-        let draggingToken = null;
+        let tokens = {}; let draggingToken = null;
 
         function initWebSocket() {
             if (ws) ws.close();
@@ -366,8 +443,9 @@
             for (const [id, t] of Object.entries(tokens)) {
                 if (Math.hypot(mx - t.x, my - t.y) < 20) { draggingToken = id; return; }
             }
+            // Spawn token (DMs spawn 'DM' tokens)
             draggingToken = myCharacter.name;
-            tokens[draggingToken] = {x: mx, y: my, color: "#3498db"};
+            tokens[draggingToken] = {x: mx, y: my, color: myCharacter.role === 'DM' ? "#e74c3c" : "#3498db"};
         });
 
         canvas.addEventListener('mousemove', e => {
@@ -382,7 +460,7 @@
         canvas.addEventListener('mouseup', () => draggingToken = null);
         canvas.addEventListener('mouseleave', () => draggingToken = null);
 
-        // --- Chat Routing Logic ---
+        // --- Chat Routing ---
         async function sendChat() {
             const input = document.getElementById('chat-input');
             const type = document.getElementById('chat-type').value;
@@ -390,11 +468,11 @@
             if(!msg) return;
             input.value = '';
 
-            if (type === 'party') {
+            if (type === 'party' || myCharacter.role === 'DM') {
                 ws.send(JSON.stringify({ type: "chat", sender: myCharacter.name, message: msg, role: "party" }));
             } else if (type === 'action') {
                 const log = document.getElementById('chat-log');
-                log.innerHTML += `<div id="typing" class="msg-ai" style="opacity: 0.5;"><i>DM is consulting the rules...</i></div>`;
+                log.innerHTML += `<div id="typing" class="msg-ai" style="opacity: 0.5;"><i>DM is resolving action...</i></div>`;
                 log.scrollTop = log.scrollHeight;
 
                 await authFetch('/api/chat', {
