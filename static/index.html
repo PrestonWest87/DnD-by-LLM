@@ -74,11 +74,12 @@
 
             <hr style="border-color: #333; margin-bottom: 15px;">
             <input type="text" id="new-camp-name" placeholder="New Campaign Name">
+            <select id="new-camp-dm" style="margin-bottom: 10px;">
+                <option value="ai">🤖 AI Dungeon Master (I will play a character)</option>
+                <option value="human">🧙‍♂️ I will be the Dungeon Master</option>
+            </select>
             <button onclick="createCampaign()">Create Campaign</button>
             <hr style="border-color: #333; margin: 15px 0;">
-            <input type="text" id="join-camp-code" placeholder="Invite Code (e.g., a1b2c3d4)">
-            <button onclick="joinCampaign()" style="background: #27ae60;">Join with Code</button>
-            <div id="lobby-msg" style="color: #f1c40f; margin-top: 10px; font-size: 14px;"></div>
         </div>
     </div>
 
@@ -127,7 +128,9 @@
 
     <div id="vtt-screen">
         <div id="left-panel" class="panel">
-            <h3 id="party-header">Campaign Party</h3>
+            <button onclick="loadDashboard()" style="background: #444; font-size: 12px; margin-bottom: 15px; padding: 6px;">⬅ Back to Campaigns</button>
+            
+            <h3 id="party-header" style="margin-top: 0;">Campaign Party</h3>
             <div id="char-list"></div>
         </div>
         <div id="center-panel" class="panel">
@@ -229,11 +232,19 @@
 
         async function createCampaign() {
             const name = document.getElementById('new-camp-name').value;
+            // NEW: Check the dropdown value
+            const isAiDm = document.getElementById('new-camp-dm').value === 'ai';
             if(!name) return;
+            
             const res = await authFetch('/api/campaigns', {
-                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: name})
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'}, 
+                body: JSON.stringify({name: name, ai_dm: isAiDm})
             });
-            loadDashboard();
+            const data = await res.json();
+            
+            // Enter immediately so they don't orphan the campaign
+            enterCampaign(data.id, data.name);
         }
 
         async function joinCampaign() {
@@ -468,9 +479,14 @@
             if(!msg) return;
             input.value = '';
 
-            if (type === 'party' || myCharacter.role === 'DM') {
+            // NEW: If the Human DM sends a message, format it distinctively
+            if (myCharacter.role === 'DM') {
+                ws.send(JSON.stringify({ type: "chat", sender: "Human DM", message: msg, role: "ai" }));
+            } 
+            else if (type === 'party') {
                 ws.send(JSON.stringify({ type: "chat", sender: myCharacter.name, message: msg, role: "party" }));
-            } else if (type === 'action') {
+            } 
+            else if (type === 'action') {
                 const log = document.getElementById('chat-log');
                 log.innerHTML += `<div id="typing" class="msg-ai" style="opacity: 0.5;"><i>DM is resolving action...</i></div>`;
                 log.scrollTop = log.scrollHeight;
