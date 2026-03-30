@@ -70,6 +70,7 @@ class UserCreate(BaseModel):
 
 class CampaignCreate(BaseModel):
     name: str
+    ai_dm: bool = False
 
 @app.get("/")
 async def root():
@@ -96,7 +97,10 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 # --- Campaign Routes ---
 @app.post("/api/campaigns")
 def create_campaign(campaign: CampaignCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    new_campaign = Campaign(name=campaign.name, dm_id=current_user.id)
+    # If ai_dm is True, the Human DM slot is left empty (None)
+    dm_id = None if campaign.ai_dm else current_user.id
+    
+    new_campaign = Campaign(name=campaign.name, dm_id=dm_id)
     db.add(new_campaign)
     db.commit()
     db.refresh(new_campaign)
