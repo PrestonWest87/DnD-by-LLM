@@ -450,13 +450,30 @@
 
         canvas.addEventListener('mousedown', e => {
             const rect = canvas.getBoundingClientRect();
-            const mx = e.clientX - rect.left; const my = e.clientY - rect.top;
+            const mx = e.clientX - rect.left; 
+            const my = e.clientY - rect.top;
+            
+            // Check if clicking an existing token
             for (const [id, t] of Object.entries(tokens)) {
-                if (Math.hypot(mx - t.x, my - t.y) < 20) { draggingToken = id; return; }
+                if (Math.hypot(mx - t.x, my - t.y) < 20) { 
+                    // Optional: Add authorization here so players can only drag their own tokens
+                    draggingToken = id; 
+                    return; 
+                }
             }
-            // Spawn token (DMs spawn 'DM' tokens)
-            draggingToken = myCharacter.name;
-            tokens[draggingToken] = {x: mx, y: my, color: myCharacter.role === 'DM' ? "#e74c3c" : "#3498db"};
+            
+            // If clicking empty space, spawn a token
+            if (myCharacter.role === 'DM') {
+                // DMs can spawn numbered NPC tokens
+                const enemyCount = Object.keys(tokens).filter(k => k.startsWith("NPC")).length + 1;
+                draggingToken = `NPC-${enemyCount}`;
+                tokens[draggingToken] = {x: mx, y: my, color: "#e74c3c"};
+            } else {
+                // Players spawn their own token
+                draggingToken = myCharacter.name;
+                tokens[draggingToken] = {x: mx, y: my, color: "#3498db"};
+            }
+            drawMap();
         });
 
         canvas.addEventListener('mousemove', e => {
