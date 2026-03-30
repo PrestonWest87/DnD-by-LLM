@@ -8,7 +8,7 @@ import json
 import os
 from collections import defaultdict
 from fastapi.security import OAuth2PasswordRequestForm
-from backend.auth import get_password_hash, verify_password, create_access_token, get_current_user
+from backend.auth import get_password_hash, verify_password, create_access_token, get_current_user, verify_ws_token
 from backend.database import get_db, Character, ChatMessage, User, Campaign
 from backend.rag import retrieve_relevant_rules
 
@@ -157,9 +157,8 @@ def get_campaign_characters(campaign_id: int, current_user: User = Depends(get_c
 # --- WebSocket & AI Chat ---
 @app.websocket("/ws/map/{campaign_id}")
 async def map_socket(websocket: WebSocket, campaign_id: int, token: str, db: Session = Depends(get_db)):
-    try:
-        user = get_current_user(token, db)
-    except HTTPException:
+    user = verify_ws_token(token, db)
+    if not user:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
     await room_manager.connect(websocket, campaign_id)
