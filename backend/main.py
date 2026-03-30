@@ -59,12 +59,15 @@ class RoomManager:
         current_state = self.campaign_states.get(campaign_id, {})
         await websocket.send_text(json.dumps({"type": "state", "data": current_state}))
 
-    def disconnect(self, websocket: WebSocket, campaign_id: int):
+    async def disconnect(self, websocket: WebSocket, campaign_id: int):
         if websocket in self.active_rooms[campaign_id]:
             self.active_rooms[campaign_id].remove(websocket)
+            # Notify remaining users to update their party list UI
+            await self.broadcast({"type": "system", "action": "reload_party"}, campaign_id)
 
     async def broadcast(self, data: dict, campaign_id: int):
-        if data.get("type") == "chat":
+        # Allow system events through immediately
+        if data.get("type") in ["chat", "system"]:
             for connection in self.active_rooms[campaign_id]:
                 await connection.send_text(json.dumps(data))
             return
