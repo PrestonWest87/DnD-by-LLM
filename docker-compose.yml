@@ -1,0 +1,11 @@
+services:
+  web:
+    build: .
+    ports:
+      - "8600:8600"
+    volumes:
+      - .:/app  # Live reload for development
+    environment:
+      # If Docker is on the same machine as Ollama (Windows/Mac), use host.docker.internal
+      # If you are on a native Linux host, you may need to use your machine's actual LAN IP (e.g., http://192.168.1.X:11434)
+      - OLLAMA_URL=http://localhost:11434
