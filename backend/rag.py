@@ -1,8 +1,6 @@
 import os
 import httpx
-
-# MUST BE SET BEFORE IMPORTING CHROMADB TO PREVENT CRASHES
-os.environ["ANONYMIZED_TELEMETRY"] = "False"
+from chromadb.config import Settings
 import chromadb
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://host.docker.internal:11434")
@@ -30,7 +28,11 @@ ollama_ef = LocalOllamaEmbeddingFunction(
     model_name="nomic-embed-text"
 )
 
-chroma_client = chromadb.PersistentClient(path="./chroma_data")
+# Explicitly disable telemetry in the settings object
+chroma_client = chromadb.PersistentClient(
+    path="./chroma_data", 
+    settings=Settings(anonymized_telemetry=False)
+)
 
 rules_collection = chroma_client.get_or_create_collection(
     name="ttrpg_rules",
