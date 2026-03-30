@@ -178,19 +178,28 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
     db.add(user_msg)
     db.commit()
 
-    # 3. Get Context (Backstory & Rules)
+    # 3. Get Context (Stats, Backstory & Rules)
     char = db.query(Character).filter(Character.campaign_id == request.campaign_id, Character.owner_id == current_user.id).first()
     backstory = char.backstory if char and char.backstory else "A standard adventurer."
+    
+    # NEW: Format the JSON stats into a readable string for the LLM
+    stats_str = "Unknown"
+    if char and char.stats:
+        stats_str = ", ".join([f"{k.upper()}: {v}" for k, v in char.stats.items()])
+
     relevant_rules = retrieve_relevant_rules(request.message)
 
+    # NEW: Updated Augmented System Prompt includes the Stats string
     system_prompt = f"""You are the Dungeon Master. 
     Use the following rules to resolve the player's action if applicable:
     {relevant_rules}
     
-    The player's character background:
-    {backstory}
+    The player's character sheet:
+    Name: {request.character_name}
+    {stats_str}
+    Background: {backstory}
     
-    Keep your response to 2-3 sentences. Describe the outcome of their action."""
+    Keep your response to 2-3 sentences. Describe the outcome of their action, taking their specific character stats into account."""
 
     # 4. Fetch Campaign History & Call LLM
     history = db.query(ChatMessage).filter(ChatMessage.campaign_id == request.campaign_id).order_by(ChatMessage.id.desc()).limit(10).all()
