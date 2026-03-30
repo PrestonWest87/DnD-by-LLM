@@ -65,7 +65,11 @@
 
     <div id="lobby-screen" class="screen">
         <div class="menu-box small-box">
-            <h2>Your Campaigns</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h2 style="margin: 0;">Your Campaigns</h2>
+                <button onclick="logout()" style="width: auto; background: #c0392b; padding: 6px 12px; font-size: 12px; margin: 0;">Log Out</button>
+            </div>
+            
             <div id="dashboard-list" style="text-align: left; margin-bottom: 20px; max-height: 200px; overflow-y: auto;">
             </div>
 
@@ -87,7 +91,10 @@
 
     <div id="char-screen" class="screen">
         <div class="menu-box large-box">
-            <h2 style="margin-top: 0;">Forge Your Hero</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h2 style="margin-top: 0;">Forge Your Hero</h2>
+                <button onclick="loadDashboard()" style="width: auto; background: #444; padding: 6px 12px; font-size: 12px; margin: 0; margin-top: -15px;">Cancel</button>
+            </div>
             <p style="font-size: 13px; color: #aaa; margin-top: -10px; margin-bottom: 20px;">Allocate the Standard Array (15, 14, 13, 12, 10, 8)</p>
             
             <div class="sheet-grid">
@@ -125,6 +132,7 @@
 
             <textarea id="char-backstory" placeholder="Brief backstory for the AI DM..." style="height: 60px;"></textarea>
             <button onclick="submitCharacter()">Enter Campaign</button>
+            <div id="char-msg" style="color: #e74c3c; margin-top: 10px; font-size: 14px;"></div>
         </div>
     </div>
 
@@ -167,14 +175,29 @@
         let ws = null;
         let finalStats = {}; 
 
+        // GLOBALLY HANDLE 401 UNAUTHORIZED
         async function authFetch(url, options = {}) {
             const token = localStorage.getItem('vtt_token');
             if (!options.headers) options.headers = {};
             options.headers['Authorization'] = `Bearer ${token}`;
-            return fetch(url, options);
+            
+            const res = await fetch(url, options);
+            if (res.status === 401) {
+                logout(true);
+                throw new Error("Unauthorized access. Token expired or invalid.");
+            }
+            return res;
         }
 
-        // Fixed screen routing logic
+        function logout(forced = false) {
+            localStorage.removeItem('vtt_token');
+            if (ws) { ws.close(); ws = null; }
+            showScreen('auth-screen');
+            const msgEl = document.getElementById('auth-msg');
+            msgEl.innerText = forced ? "Session expired. Please log in again." : "Logged out successfully.";
+            msgEl.style.color = forced ? "#e74c3c" : "#2ecc71";
+        }
+
         function showScreen(screenId) {
             document.querySelectorAll('.screen, #vtt-screen').forEach(el => {
                 el.classList.remove('active-screen');
@@ -199,6 +222,7 @@
                 document.getElementById('auth-msg').style.color = "#2ecc71";
             } else {
                 document.getElementById('auth-msg').innerText = (await res.json()).detail || "Error";
+                document.getElementById('auth-msg').style.color = "#e74c3c";
             }
         }
 
@@ -211,36 +235,42 @@
             });
             if (res.ok) {
                 localStorage.setItem('vtt_token', (await res.json()).access_token);
+                document.getElementById('auth-msg').innerText = "";
                 loadDashboard();
             } else {
                 document.getElementById('auth-msg').innerText = "Invalid credentials";
+                document.getElementById('auth-msg').style.color = "#e74c3c";
             }
         }
 
         if (localStorage.getItem('vtt_token')) loadDashboard();
 
         async function loadDashboard() {
-            showScreen('lobby-screen');
-            const res = await authFetch('/api/campaigns/my');
-            if (res.ok) {
-                const campaigns = await res.json();
-                const list = document.getElementById('dashboard-list');
-                list.innerHTML = '';
-                if (campaigns.length === 0) {
-                    list.innerHTML = '<div style="color:#aaa; font-style:italic;">No campaigns yet. Create or join one!</div>';
-                }
-                campaigns.forEach(c => {
-                    const codeDisp = c.role === 'DM' ? ` <span style="font-size:10px; color:#aaa;">(Code: ${c.invite_code})</span>` : '';
-                    list.innerHTML += `
-                        <div class="camp-list-item">
-                            <div>
-                                <b>${c.name}</b>${codeDisp}<br>
-                                <span class="camp-badge">${c.role}</span>
+            try {
+                const res = await authFetch('/api/campaigns/my');
+                if (res.ok) {
+                    showScreen('lobby-screen');
+                    const campaigns = await res.json();
+                    const list = document.getElementById('dashboard-list');
+                    list.innerHTML = '';
+                    if (campaigns.length === 0) {
+                        list.innerHTML = '<div style="color:#aaa; font-style:italic;">No campaigns yet. Create or join one!</div>';
+                    }
+                    campaigns.forEach(c => {
+                        const codeDisp = c.role === 'DM' ? ` <span style="font-size:10px; color:#aaa;">(Code: ${c.invite_code})</span>` : '';
+                        list.innerHTML += `
+                            <div class="camp-list-item">
+                                <div>
+                                    <b>${c.name}</b>${codeDisp}<br>
+                                    <span class="camp-badge">${c.role}</span>
+                                </div>
+                                <button onclick="enterCampaign(${c.id}, '${c.name}')" style="width: 80px; margin: 0; background: #2ecc71;">Launch</button>
                             </div>
-                            <button onclick="enterCampaign(${c.id}, '${c.name}')" style="width: 80px; margin: 0; background: #2ecc71;">Launch</button>
-                        </div>
-                    `;
-                });
+                        `;
+                    });
+                }
+            } catch (e) {
+                // Caught by the 401 interceptor, UI is routed to login
             }
         }
 
@@ -249,25 +279,31 @@
             const isAiDm = document.getElementById('new-camp-dm').value === 'ai';
             if(!name) return;
             
-            const res = await authFetch('/api/campaigns', {
-                method: 'POST', 
-                headers: {'Content-Type': 'application/json'}, 
-                body: JSON.stringify({name: name, ai_dm: isAiDm})
-            });
-            const data = await res.json();
-            enterCampaign(data.id, data.name);
+            try {
+                const res = await authFetch('/api/campaigns', {
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'}, 
+                    body: JSON.stringify({name: name, ai_dm: isAiDm})
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    enterCampaign(data.id, data.name);
+                }
+            } catch (e) { }
         }
 
         async function joinCampaign() {
             const code = document.getElementById('join-camp-code').value;
             if(!code) return;
-            const res = await authFetch(`/api/campaigns/join/${code}`, { method: 'POST' });
-            if (res.ok) {
-                const data = await res.json();
-                enterCampaign(data.campaign_id, data.campaign_name);
-            } else {
-                document.getElementById('lobby-msg').innerText = "Invalid invite code.";
-            }
+            try {
+                const res = await authFetch(`/api/campaigns/join/${code}`, { method: 'POST' });
+                if (res.ok) {
+                    const data = await res.json();
+                    enterCampaign(data.campaign_id, data.campaign_name);
+                } else {
+                    document.getElementById('lobby-msg').innerText = "Invalid invite code.";
+                }
+            } catch (e) { }
         }
 
         const attributes = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
@@ -333,14 +369,17 @@
 
         async function enterCampaign(id, name) {
             currentCampaignId = id; currentCampaignName = name;
-            const res = await authFetch(`/api/campaigns/${id}/my-character`);
-            if (res.ok) {
-                myCharacter = await res.json();
-                launchVTT();
-            } else {
-                showScreen('char-screen');
-                calcStats(); 
-            }
+            try {
+                const res = await authFetch(`/api/campaigns/${id}/my-character`);
+                if (res.ok) {
+                    myCharacter = await res.json();
+                    launchVTT();
+                } else {
+                    document.getElementById('char-msg').innerText = "";
+                    showScreen('char-screen');
+                    calcStats(); 
+                }
+            } catch (e) { }
         }
 
         async function submitCharacter() {
@@ -350,13 +389,17 @@
                 stats: finalStats,
                 backstory: document.getElementById('char-backstory').value || "A generic adventurer."
             };
-            const res = await authFetch('/api/character', {
-                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
-            });
-            if (res.ok) {
-                myCharacter = await res.json();
-                launchVTT();
-            }
+            try {
+                const res = await authFetch('/api/character', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
+                });
+                if (res.ok) {
+                    myCharacter = await res.json();
+                    launchVTT();
+                } else {
+                    document.getElementById('char-msg').innerText = "Failed to create character.";
+                }
+            } catch (e) { }
         }
 
         function launchVTT() {
@@ -380,43 +423,48 @@
             btn.innerText = "Generating...";
             btn.disabled = true;
             
-            await authFetch(`/api/campaigns/${currentCampaignId}/generate-outline`, { method: 'POST' });
-            
-            btn.innerText = "Outline Generated!";
+            try {
+                await authFetch(`/api/campaigns/${currentCampaignId}/generate-outline`, { method: 'POST' });
+                btn.innerText = "Outline Generated!";
+            } catch(e) {
+                btn.innerText = "Error Generating";
+            }
             setTimeout(() => { btn.innerText = "Generate AI Story Outline"; btn.disabled = false; }, 3000);
         }
 
         async function loadParty() {
-            const res = await authFetch(`/api/campaigns/${currentCampaignId}/characters`);
-            if (!res.ok) return;
-            const chars = await res.json();
-            const list = document.getElementById('char-list');
-            list.innerHTML = '';
-            
-            chars.forEach(c => {
-                const stats = typeof c.stats === 'string' ? JSON.parse(c.stats) : (c.stats || {});
-                const border = (myCharacter && c.name === myCharacter.name) ? 'border-left: 4px solid #2ecc71;' : 'border-left: 4px solid #3498db;';
+            try {
+                const res = await authFetch(`/api/campaigns/${currentCampaignId}/characters`);
+                if (!res.ok) return;
+                const chars = await res.json();
+                const list = document.getElementById('char-list');
+                list.innerHTML = '';
                 
-                list.innerHTML += `
-                    <div class="char-card" style="${border}">
-                        <div class="char-card-header">
-                            <b style="font-size: 15px;">${c.name}</b>
-                            <span style="color: #aaa;">Lvl ${stats.level || 1} ${stats.race || ''} ${stats.char_class || ''}</span>
+                chars.forEach(c => {
+                    const stats = typeof c.stats === 'string' ? JSON.parse(c.stats) : (c.stats || {});
+                    const border = (myCharacter && c.name === myCharacter.name) ? 'border-left: 4px solid #2ecc71;' : 'border-left: 4px solid #3498db;';
+                    
+                    list.innerHTML += `
+                        <div class="char-card" style="${border}">
+                            <div class="char-card-header">
+                                <b style="font-size: 15px;">${c.name}</b>
+                                <span style="color: #aaa;">Lvl ${stats.level || 1} ${stats.race || ''} ${stats.char_class || ''}</span>
+                            </div>
+                            <div style="margin-bottom: 8px; color: #fff;">
+                                ❤️ ${stats.hp || 0} HP &nbsp;&nbsp;|&nbsp;&nbsp; 🛡️ ${stats.ac || 0} AC
+                            </div>
+                            <div class="char-card-stats">
+                                <div class="stat-badge">STR: ${stats.STR || 10}</div>
+                                <div class="stat-badge">DEX: ${stats.DEX || 10}</div>
+                                <div class="stat-badge">CON: ${stats.CON || 10}</div>
+                                <div class="stat-badge">INT: ${stats.INT || 10}</div>
+                                <div class="stat-badge">WIS: ${stats.WIS || 10}</div>
+                                <div class="stat-badge">CHA: ${stats.CHA || 10}</div>
+                            </div>
                         </div>
-                        <div style="margin-bottom: 8px; color: #fff;">
-                            ❤️ ${stats.hp || 0} HP &nbsp;&nbsp;|&nbsp;&nbsp; 🛡️ ${stats.ac || 0} AC
-                        </div>
-                        <div class="char-card-stats">
-                            <div class="stat-badge">STR: ${stats.STR || 10}</div>
-                            <div class="stat-badge">DEX: ${stats.DEX || 10}</div>
-                            <div class="stat-badge">CON: ${stats.CON || 10}</div>
-                            <div class="stat-badge">INT: ${stats.INT || 10}</div>
-                            <div class="stat-badge">WIS: ${stats.WIS || 10}</div>
-                            <div class="stat-badge">CHA: ${stats.CHA || 10}</div>
-                        </div>
-                    </div>
-                `;
-            });
+                    `;
+                });
+            } catch(e) {}
         }
 
         const canvas = document.getElementById('map');
@@ -471,11 +519,11 @@
                 if (Math.hypot(mx - t.x, my - t.y) < 20) { draggingToken = id; return; }
             }
             
-            if (myCharacter.role === 'DM') {
+            if (myCharacter && myCharacter.role === 'DM') {
                 const enemyCount = Object.keys(tokens).filter(k => k.startsWith("NPC")).length + 1;
                 draggingToken = `NPC-${enemyCount}`;
                 tokens[draggingToken] = {x: mx, y: my, color: "#e74c3c"};
-            } else {
+            } else if (myCharacter) {
                 draggingToken = myCharacter.name;
                 tokens[draggingToken] = {x: mx, y: my, color: "#3498db"};
             }
@@ -512,10 +560,12 @@
                 log.innerHTML += `<div id="typing" class="msg-ai" style="opacity: 0.5;"><i>DM is resolving action...</i></div>`;
                 log.scrollTop = log.scrollHeight;
 
-                await authFetch('/api/chat', {
-                    method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ campaign_id: currentCampaignId, message: msg, character_name: myCharacter.name })
-                });
+                try {
+                    await authFetch('/api/chat', {
+                        method: 'POST', headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ campaign_id: currentCampaignId, message: msg, character_name: myCharacter.name })
+                    });
+                } catch(e) {}
             }
         }
     </script>
