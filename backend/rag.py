@@ -1,12 +1,32 @@
 import chromadb
-from chromadb.utils import embedding_functions
+import httpx
 import os
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 
-# Configure Chroma to use Ollama for creating embeddings
-ollama_ef = embedding_functions.OllamaEmbeddingFunction(
-    url=f"{OLLAMA_URL}/api/embeddings",
+# --- Custom Embedding Function ---
+class LocalOllamaEmbeddingFunction:
+    """Custom embedder to bypass version limitations in ChromaDB"""
+    def __init__(self, url: str, model_name: str):
+        self.url = url
+        self.model_name = model_name
+
+    def __call__(self, input: list[str]) -> list[list[float]]:
+        embeddings = []
+        with httpx.Client() as client:
+            for text in input:
+                response = client.post(
+                    f"{self.url}/api/embeddings",
+                    json={"model": self.model_name, "prompt": text},
+                    timeout=60.0
+                )
+                response.raise_for_status()
+                embeddings.append(response.json()["embedding"])
+        return embeddings
+
+# Configure Chroma to use our custom Ollama embedder
+ollama_ef = LocalOllamaEmbeddingFunction(
+    url=OLLAMA_URL,
     model_name="nomic-embed-text"
 )
 
@@ -21,8 +41,7 @@ rules_collection = chroma_client.get_or_create_collection(
 
 def ingest_rulebook(text_content: str):
     """
-    A simple chunker. In a production app, you'd use LangChain's RecursiveCharacterTextSplitter.
-    Here, we split by double-newlines (paragraphs/sections) to keep it lightweight.
+    A simple chunker. Splits by double-newlines (paragraphs/sections) to keep it lightweight.
     """
     chunks = [chunk.strip() for chunk in text_content.split("\n\n") if len(chunk.strip()) > 50]
     
