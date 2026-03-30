@@ -44,7 +44,7 @@ def startup_event():
                     ingest_rulebook(f.read())
                     print("Successfully ingested core_rules.txt into ChromaDB.")
                 except httpx.ConnectError:
-                    print("CRITICAL WARNING: Could not connect to Ollama at startup. RAG ingestion failed.")
+                    print("CRITICAL WARNING: Could not connect to Ollama at startup.")
 
 class RoomManager:
     def __init__(self):
@@ -220,7 +220,7 @@ def process_rulebook(content: bytes, filename: str):
 async def upload_rules(background_tasks: BackgroundTasks, file: UploadFile = File(...), current_user: User = Depends(get_current_user)):
     content = await file.read()
     background_tasks.add_task(process_rulebook, content, file.filename)
-    return {"message": "Upload caught! The AI is reading the rulebook in the background. Check your server console for progress."}
+    return {"message": "Upload caught! The AI is reading the rulebook in the background."}
 
 @app.post("/api/character")
 def create_character(char: CharCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -289,11 +289,20 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
     char = db.query(Character).filter(Character.campaign_id == request.campaign_id, Character.owner_id == current_user.id).first()
     backstory = char.backstory if char and char.backstory else "A standard adventurer."
     
-    # Flatten the stats dictionary for the AI prompt
     if char and char.stats:
         stats_str = f"Level {char.stats.get('level', 1)} {char.stats.get('race', '')} {char.stats.get('char_class', '')}. "
         stats_str += f"Alignment: {char.stats.get('alignment', 'Neutral')}, Background: {char.stats.get('background', 'Unknown')}. "
         stats_str += f"HP: {char.stats.get('hp', 10)}, AC: {char.stats.get('ac', 10)}. "
+        stats_str += f"Proficiency Bonus: +{char.stats.get('prof_bonus', 2)}. "
+        
+        # Incorporate Equipment and Skills
+        equipment = char.stats.get("equipment", {})
+        weapon = equipment.get("weapon", "Unarmed")
+        armor = equipment.get("armor", "Unarmored")
+        skills = ", ".join(char.stats.get("skills", ["None"]))
+        
+        stats_str += f"Wielding: {weapon}, Wearing: {armor}. Proficient Skills: {skills}. "
+        
         stats_str += f"STR: {char.stats.get('STR', 10)} ({char.stats.get('STR_mod', 0)}), DEX: {char.stats.get('DEX', 10)} ({char.stats.get('DEX_mod', 0)}), "
         stats_str += f"CON: {char.stats.get('CON', 10)} ({char.stats.get('CON_mod', 0)}), INT: {char.stats.get('INT', 10)} ({char.stats.get('INT_mod', 0)}), "
         stats_str += f"WIS: {char.stats.get('WIS', 10)} ({char.stats.get('WIS_mod', 0)}), CHA: {char.stats.get('CHA', 10)} ({char.stats.get('CHA_mod', 0)})."
@@ -301,7 +310,6 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
         stats_str = "Unknown"
 
     relevant_rules = retrieve_relevant_rules(request.message)
-
     campaign = db.query(Campaign).filter(Campaign.id == request.campaign_id).first()
     outline = campaign.story_outline if campaign.story_outline else "No outline set. Generate a creative starting scenario."
 
@@ -309,13 +317,13 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
     Campaign Secret Outline: {outline}
     D&D 5e Rulebook Context: {relevant_rules}
     Current Player Sheet: {request.character_name}. {stats_str} 
-    Background/Inventory: {backstory}
+    Character Backstory: {backstory}
     
     DIRECTIVES:
     1. ACT ENTIRELY AS THE DUNGEON MASTER. Never break character.
-    2. Narrate the environment and the results of player actions.
-    3. If the player attempts an action with an uncertain outcome, require a specific 1d20 roll (e.g., 'Make a DC 15 Dexterity saving throw' or 'Roll a Perception check').
-    4. IF THE PLAYER PROVIDES A ROLL RESULT (e.g., 'I rolled an 18' or '[Rolled 1d20: 14]'): Calculate their success or failure against your hidden Difficulty Class (DC) taking into account their relevant ability modifier, and narrate the outcome.
+    2. Narrate the environment and the results of player actions based on their specific equipped weapons/armor and skills.
+    3. If the player attempts an action with an uncertain outcome, require a specific 1d20 roll (e.g., 'Make a DC 15 Dexterity saving throw' or 'Roll an Athletics check').
+    4. IF THE PLAYER PROVIDES A ROLL RESULT (e.g., 'I rolled an 18' or '[Rolled 1d20: 14]'): Calculate their success or failure against your hidden Difficulty Class (DC) and narrate the outcome.
     5. Keep responses immersive but concise (2-4 sentences max)."""
 
     history = db.query(ChatMessage).filter(ChatMessage.campaign_id == request.campaign_id).order_by(ChatMessage.id.desc()).limit(15).all()
