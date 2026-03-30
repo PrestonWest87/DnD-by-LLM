@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status, UploadFile, File
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status, UploadFile, File, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -188,11 +188,12 @@ async def generate_campaign_outline(campaign_id: int, current_user: User = Depen
     db.commit()
     return {"message": "Outline generated successfully", "outline": outline}
 
-@app.post("/api/upload-rules")
-async def upload_rules(file: UploadFile = File(...), current_user: User = Depends(get_current_user)):
-    content = await file.read()
+
+# NEW: Background Processing Function
+def process_rulebook(content: bytes, filename: str):
     try:
-        if file.filename.endswith('.pdf'):
+        print(f"Starting to process massive rulebook: {filename}")
+        if filename.endswith('.pdf'):
             import PyPDF2
             import io
             pdf_reader = PyPDF2.PdfReader(io.BytesIO(content))
@@ -204,18 +205,37 @@ async def upload_rules(file: UploadFile = File(...), current_user: User = Depend
         splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
         chunks = splitter.split_text(text)
         
+        print(f"Book parsed. Split into {len(chunks)} chunks. Beginning database ingestion...")
+        
         from backend.rag import rules_collection
-        ids = [f"rule_{secrets.token_hex(4)}" for _ in chunks]
-        if chunks:
-            rules_collection.upsert(documents=chunks, ids=ids)
+        
+        # Batching to prevent overwhelming memory or Ollama connection limits
+        batch_size = 100
+        for i in range(0, len(chunks), batch_size):
+            batch_chunks = chunks[i:i + batch_size]
+            ids = [f"rule_{secrets.token_hex(4)}" for _ in batch_chunks]
+            if batch_chunks:
+                rules_collection.upsert(documents=batch_chunks, ids=ids)
+            print(f"Embedded batch {i//batch_size + 1} of {(len(chunks)//batch_size) + 1}...")
             
-        return {"message": f"Ingested {len(chunks)} chunks into rule database."}
+        print(f"Finished successfully embedding {filename} into the AI's memory!")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"CRITICAL ERROR processing rulebook {filename}: {str(e)}")
+
+
+@app.post("/api/upload-rules")
+async def upload_rules(background_tasks: BackgroundTasks, file: UploadFile = File(...), current_user: User = Depends(get_current_user)):
+    content = await file.read()
+    
+    # Hand the heavy lifting off to the background task
+    background_tasks.add_task(process_rulebook, content, file.filename)
+    
+    # Immediately tell the browser we caught it so it doesn't time out
+    return {"message": "Upload caught! The AI is reading the rulebook in the background. Check your server console for progress."}
+
 
 @app.post("/api/character")
 def create_character(char: CharCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    # FIX: Prevent duplicates by updating if it exists
     existing = db.query(Character).filter(Character.campaign_id == char.campaign_id, Character.owner_id == current_user.id).first()
     if existing:
         existing.name = char.name
@@ -246,7 +266,6 @@ def get_my_character(campaign_id: int, current_user: User = Depends(get_current_
 def get_campaign_characters(campaign_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return db.query(Character).filter(Character.campaign_id == campaign_id).all()
 
-# NEW: Fetch Chat History for Persistent Sessions
 @app.get("/api/campaigns/{campaign_id}/chat-history")
 def get_chat_history(campaign_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     history = db.query(ChatMessage).filter(ChatMessage.campaign_id == campaign_id).order_by(ChatMessage.id.asc()).all()
@@ -287,7 +306,6 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
     campaign = db.query(Campaign).filter(Campaign.id == request.campaign_id).first()
     outline = campaign.story_outline if campaign.story_outline else "No outline set. Generate a creative starting scenario."
 
-    # FIX: Highly tuned D&D 5e strict DM prompt
     system_prompt = f"""You are an expert Dungeon Master running a strictly Rules-As-Written Dungeons & Dragons 5e campaign.
     Campaign Secret Outline: {outline}
     D&D 5e Rulebook Context: {relevant_rules}
