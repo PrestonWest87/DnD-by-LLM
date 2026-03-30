@@ -10,7 +10,9 @@ from collections import defaultdict
 from fastapi.security import OAuth2PasswordRequestForm
 from backend.auth import get_password_hash, verify_password, create_access_token, get_current_user
 from backend.database import get_db, Character, ChatMessage, User, Campaign
-from backend.rag import retrieve_relevant_rules
+
+# --- ADDED MISSING IMPORT ---
+from backend.rag import retrieve_relevant_rules 
 
 app = FastAPI()
 
@@ -19,7 +21,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 MODEL_NAME = "phi4-mini:3.8b-q4_K_M"
 
-# --- WebSocket Manager for Map & Chat ---
+# --- WebSocket Manager ---
 class RoomManager:
     def __init__(self):
         self.active_rooms: dict[int, list[WebSocket]] = defaultdict(list)
@@ -36,13 +38,11 @@ class RoomManager:
             self.active_rooms[campaign_id].remove(websocket)
 
     async def broadcast(self, data: dict, campaign_id: int):
-        # If the payload is a chat message, broadcast it to the room immediately
         if data.get("type") == "chat":
             for connection in self.active_rooms[campaign_id]:
                 await connection.send_text(json.dumps(data))
             return
 
-        # Otherwise, update server state for map tokens
         if data.get("type") == "move":
             token_id = data.get("id")
             if campaign_id not in self.campaign_states:
@@ -59,7 +59,7 @@ class RoomManager:
 
 room_manager = RoomManager()
 
-# --- Pydantic Schemas ---
+# --- FIXED Pydantic Schemas ---
 class ChatRequest(BaseModel):
     campaign_id: int
     message: str
@@ -138,7 +138,6 @@ def create_character(char: CharCreate, current_user: User = Depends(get_current_
 
 @app.get("/api/campaigns/{campaign_id}/my-character")
 def get_my_character(campaign_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    # Check if the active user has a character in this specific campaign
     char = db.query(Character).filter(Character.campaign_id == campaign_id, Character.owner_id == current_user.id).first()
     if not char:
         raise HTTPException(status_code=404, detail="Character not found")
@@ -146,7 +145,6 @@ def get_my_character(campaign_id: int, current_user: User = Depends(get_current_
 
 @app.get("/api/campaigns/{campaign_id}/characters")
 def get_campaign_characters(campaign_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    # Fetch the whole party so players can see each other
     return db.query(Character).filter(Character.campaign_id == campaign_id).all()
 
 # --- WebSocket & AI Chat ---
@@ -168,28 +166,23 @@ async def map_socket(websocket: WebSocket, campaign_id: int, token: str, db: Ses
 
 @app.post("/api/chat")
 async def chat(request: ChatRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    # 1. Broadcast the user's action to the room immediately so everyone sees it
     await room_manager.broadcast({
         "type": "chat", "sender": request.character_name, "message": request.message, "role": "user"
     }, request.campaign_id)
 
-    # 2. Save User Message to History
     user_msg = ChatMessage(campaign_id=request.campaign_id, sender_type="player", sender_name=request.character_name, content=request.message)
     db.add(user_msg)
     db.commit()
 
-    # 3. Get Context (Stats, Backstory & Rules)
     char = db.query(Character).filter(Character.campaign_id == request.campaign_id, Character.owner_id == current_user.id).first()
     backstory = char.backstory if char and char.backstory else "A standard adventurer."
     
-    # NEW: Format the JSON stats into a readable string for the LLM
     stats_str = "Unknown"
     if char and char.stats:
         stats_str = ", ".join([f"{k.upper()}: {v}" for k, v in char.stats.items()])
 
     relevant_rules = retrieve_relevant_rules(request.message)
 
-    # NEW: Updated Augmented System Prompt includes the Stats string
     system_prompt = f"""You are the Dungeon Master. 
     Use the following rules to resolve the player's action if applicable:
     {relevant_rules}
@@ -201,7 +194,6 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
     
     Keep your response to 2-3 sentences. Describe the outcome of their action, taking their specific character stats into account."""
 
-    # 4. Fetch Campaign History & Call LLM
     history = db.query(ChatMessage).filter(ChatMessage.campaign_id == request.campaign_id).order_by(ChatMessage.id.desc()).limit(10).all()
     history.reverse()
     
@@ -220,7 +212,6 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
         except Exception as e:
             ai_text = f"System Error: {str(e)}"
 
-    # 5. Save and Broadcast AI Response to everyone
     ai_msg = ChatMessage(campaign_id=request.campaign_id, sender_type="ai_dm", sender_name="DM", content=ai_text)
     db.add(ai_msg)
     db.commit()
