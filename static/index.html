@@ -484,10 +484,18 @@
         function initWebSocket() {
             if (ws) ws.close();
             const token = localStorage.getItem('vtt_token');
-            ws = new WebSocket(`ws://${window.location.host}/ws/map/${currentCampaignId}?token=${token}`);
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            
+            ws = new WebSocket(`${protocol}//${window.location.host}/ws/map/${currentCampaignId}?token=${token}`);
             
             ws.onmessage = (event) => {
                 const payload = JSON.parse(event.data);
+                
+                // NEW: Triggers when anyone connects or disconnects
+                if (payload.type === 'system' && payload.action === 'reload_party') {
+                    loadParty();
+                }
+                
                 if (payload.type === 'state') {
                     for (const id in payload.data) {
                         if (draggingToken !== id) tokens[id] = payload.data[id];
