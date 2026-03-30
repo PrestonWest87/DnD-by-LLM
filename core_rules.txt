@@ -1,0 +1,5 @@
+Combat System: When a player attacks with a melee weapon, they roll a 1d20 and add their Strength modifier. If the total is equal to or higher than the target's Armor Class (AC), it is a hit.
+
+Magic System - Fireball: Fireball is a spell that causes a massive explosion. It deals 8d6 fire damage to all creatures within a 20-foot radius. Creatures can attempt a Dexterity save to take half damage.
+
+Stealth System: To hide, a player rolls 1d20 and adds their Stealth modifier. The result must beat the passive Perception of any enemies in the area. If successful, the player is unseen.
