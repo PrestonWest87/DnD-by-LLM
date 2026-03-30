@@ -188,8 +188,6 @@ async def generate_campaign_outline(campaign_id: int, current_user: User = Depen
     db.commit()
     return {"message": "Outline generated successfully", "outline": outline}
 
-
-# NEW: Background Processing Function
 def process_rulebook(content: bytes, filename: str):
     try:
         print(f"Starting to process massive rulebook: {filename}")
@@ -205,11 +203,7 @@ def process_rulebook(content: bytes, filename: str):
         splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
         chunks = splitter.split_text(text)
         
-        print(f"Book parsed. Split into {len(chunks)} chunks. Beginning database ingestion...")
-        
         from backend.rag import rules_collection
-        
-        # Batching to prevent overwhelming memory or Ollama connection limits
         batch_size = 100
         for i in range(0, len(chunks), batch_size):
             batch_chunks = chunks[i:i + batch_size]
@@ -222,17 +216,11 @@ def process_rulebook(content: bytes, filename: str):
     except Exception as e:
         print(f"CRITICAL ERROR processing rulebook {filename}: {str(e)}")
 
-
 @app.post("/api/upload-rules")
 async def upload_rules(background_tasks: BackgroundTasks, file: UploadFile = File(...), current_user: User = Depends(get_current_user)):
     content = await file.read()
-    
-    # Hand the heavy lifting off to the background task
     background_tasks.add_task(process_rulebook, content, file.filename)
-    
-    # Immediately tell the browser we caught it so it doesn't time out
     return {"message": "Upload caught! The AI is reading the rulebook in the background. Check your server console for progress."}
-
 
 @app.post("/api/character")
 def create_character(char: CharCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -300,7 +288,18 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
 
     char = db.query(Character).filter(Character.campaign_id == request.campaign_id, Character.owner_id == current_user.id).first()
     backstory = char.backstory if char and char.backstory else "A standard adventurer."
-    stats_str = ", ".join([f"{k.upper()}: {v}" for k, v in char.stats.items()]) if char and char.stats else "Unknown"
+    
+    # Flatten the stats dictionary for the AI prompt
+    if char and char.stats:
+        stats_str = f"Level {char.stats.get('level', 1)} {char.stats.get('race', '')} {char.stats.get('char_class', '')}. "
+        stats_str += f"Alignment: {char.stats.get('alignment', 'Neutral')}, Background: {char.stats.get('background', 'Unknown')}. "
+        stats_str += f"HP: {char.stats.get('hp', 10)}, AC: {char.stats.get('ac', 10)}. "
+        stats_str += f"STR: {char.stats.get('STR', 10)} ({char.stats.get('STR_mod', 0)}), DEX: {char.stats.get('DEX', 10)} ({char.stats.get('DEX_mod', 0)}), "
+        stats_str += f"CON: {char.stats.get('CON', 10)} ({char.stats.get('CON_mod', 0)}), INT: {char.stats.get('INT', 10)} ({char.stats.get('INT_mod', 0)}), "
+        stats_str += f"WIS: {char.stats.get('WIS', 10)} ({char.stats.get('WIS_mod', 0)}), CHA: {char.stats.get('CHA', 10)} ({char.stats.get('CHA_mod', 0)})."
+    else:
+        stats_str = "Unknown"
+
     relevant_rules = retrieve_relevant_rules(request.message)
 
     campaign = db.query(Campaign).filter(Campaign.id == request.campaign_id).first()
@@ -309,13 +308,15 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
     system_prompt = f"""You are an expert Dungeon Master running a strictly Rules-As-Written Dungeons & Dragons 5e campaign.
     Campaign Secret Outline: {outline}
     D&D 5e Rulebook Context: {relevant_rules}
-    Current Player: {request.character_name}, Stats: {stats_str}, Background: {backstory}
+    Current Player Sheet: {request.character_name}. {stats_str} 
+    Background/Inventory: {backstory}
     
     DIRECTIVES:
     1. ACT ENTIRELY AS THE DUNGEON MASTER. Never break character.
     2. Narrate the environment and the results of player actions.
-    3. Require the player to make specific 1d20 rolls (e.g., 'Make a DC 15 Dexterity saving throw' or 'Roll a Perception check') when the outcome of an action is uncertain.
-    4. Keep responses immersive but concise (2-4 sentences max)."""
+    3. If the player attempts an action with an uncertain outcome, require a specific 1d20 roll (e.g., 'Make a DC 15 Dexterity saving throw' or 'Roll a Perception check').
+    4. IF THE PLAYER PROVIDES A ROLL RESULT (e.g., 'I rolled an 18' or '[Rolled 1d20: 14]'): Calculate their success or failure against your hidden Difficulty Class (DC) taking into account their relevant ability modifier, and narrate the outcome.
+    5. Keep responses immersive but concise (2-4 sentences max)."""
 
     history = db.query(ChatMessage).filter(ChatMessage.campaign_id == request.campaign_id).order_by(ChatMessage.id.desc()).limit(15).all()
     history.reverse()
