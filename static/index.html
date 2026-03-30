@@ -9,13 +9,14 @@
         .active-screen { display: flex; }
         
         .menu-box { background: #1e1e1e; padding: 30px; border-radius: 8px; border: 1px solid #333; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);}
-        .small-box { width: 350px; } .large-box { width: 650px; max-height: 90vh; overflow-y: auto;}
+        .small-box { width: 350px; } .large-box { width: 800px; max-height: 95vh; overflow-y: auto;}
         
         input[type="text"], input[type="password"], input[type="file"], input[type="number"], textarea, select { 
             width: 100%; margin-bottom: 10px; padding: 10px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; box-sizing: border-box;
         }
         button { width: 100%; padding: 10px; background: #4facfe; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-bottom: 10px;}
         button:hover { background: #00f2fe; color: black;}
+        button:disabled { background: #555; cursor: not-allowed; color: #888; }
 
         .camp-list-item { background: #2c2c2c; padding: 10px; margin-bottom: 10px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; border-left: 4px solid #4facfe;}
         .camp-badge { background: #111; padding: 3px 8px; border-radius: 10px; font-size: 11px; color: #ccc;}
@@ -23,8 +24,9 @@
         /* Character Sheet Grid Updates */
         .sheet-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; text-align: left; margin-bottom: 15px;}
         .attr-row { display: flex; justify-content: space-between; align-items: center; background: #222; padding: 8px; margin-bottom: 5px; border-radius: 4px; border: 1px solid #444;}
-        .attr-label { width: 40px; font-weight: bold; color: #aaa;}
+        .attr-label { width: 40px; font-weight: bold; color: #aaa; cursor: help; border-bottom: 1px dotted #888;}
         .attr-input { width: 60px; margin: 0; padding: 5px; text-align: center; background: #444; color: white; border: 1px solid #555; border-radius: 3px;}
+        .attr-input:read-only { background: #222; color: #888; border-color: #333; }
         .attr-result { width: 50px; text-align: center; font-size: 16px; font-weight: bold; color: #4facfe;}
         .attr-mod { width: 40px; text-align: right; font-size: 14px; color: #a8e6cf;}
         
@@ -33,9 +35,13 @@
         .gen-btn.active { background: #e67e22;}
 
         .derived-stats { display: flex; justify-content: space-around; background: #181818; padding: 15px; border-radius: 4px; border: 1px solid #333; margin-bottom: 15px;}
-        .d-stat { text-align: center;}
+        .d-stat { text-align: center; cursor: help;}
         .d-val { font-size: 24px; font-weight: bold; color: #fff;}
         .d-lbl { font-size: 11px; color: #888; text-transform: uppercase;}
+
+        .skills-container { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; background: #222; padding: 10px; border-radius: 4px; border: 1px solid #444; font-size: 12px; margin-bottom: 10px;}
+        .skill-item { display: flex; align-items: center; gap: 5px; cursor: help;}
+        .skill-item input { width: auto; margin: 0; }
 
         #vtt-screen { display: none; width: 100%; height: 100%; flex-direction: row; }
         .panel { padding: 20px; border-right: 1px solid #333; overflow-y: auto; }
@@ -44,7 +50,8 @@
         #right-panel { width: 350px; background: #1e1e1e; display: flex; flex-direction: column; }
         
         canvas { background: #2b2b2b; border: 2px solid #555; cursor: grab; box-shadow: 0 4px 8px rgba(0,0,0,0.5); }
-        .char-card { background: #2c2c2c; padding: 12px; margin-bottom: 12px; border-radius: 5px; border-left: 4px solid #3498db; font-size: 13px; position: relative;}
+        .char-card { background: #2c2c2c; padding: 12px; margin-bottom: 12px; border-radius: 5px; border-left: 4px solid #3498db; font-size: 13px; position: relative; cursor: pointer; transition: background 0.2s;}
+        .char-card:hover { background: #3c3c3c; }
         .char-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; border-bottom: 1px solid #444; padding-bottom: 5px;}
         .char-card-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; text-align: center; font-size: 11px; color: #ccc;}
         .stat-badge { background: #111; padding: 3px; border-radius: 3px; border: 1px solid #444;}
@@ -55,14 +62,48 @@
         .msg-ai { color: #a8e6cf; margin-bottom: 8px; }
         .msg-party { color: #f1c40f; margin-bottom: 8px; font-style: italic; }
         
-        /* Dice Tray Styles */
         .dice-tray { background: #222; padding: 10px; border-radius: 4px; border: 1px solid #444; margin-bottom: 10px;}
         .dice-btn-group { display: flex; gap: 5px; margin-bottom: 5px; justify-content: space-between;}
         .dice-btn { background: #8e44ad; width: auto; padding: 5px 8px; font-size: 12px; margin: 0; flex-grow: 1;}
         .dice-btn:hover { background: #9b59b6;}
+
+        /* MODAL STYLES */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-content { background: #1e1e1e; padding: 25px; border-radius: 8px; width: 500px; max-width: 90%; border: 1px solid #4facfe; position: relative; color: white; }
+        .close-btn { position: absolute; top: 10px; right: 15px; font-size: 20px; cursor: pointer; color: #aaa; }
+        .close-btn:hover { color: white; }
     </style>
 </head>
 <body>
+
+    <div id="char-sheet-modal" class="modal-overlay" onclick="if(event.target===this) document.getElementById('char-sheet-modal').style.display='none'">
+        <div class="modal-content">
+            <span class="close-btn" onclick="document.getElementById('char-sheet-modal').style.display='none'">&times;</span>
+            <h2 id="modal-name" style="margin-top:0; color:#4facfe;">Character Name</h2>
+            <div style="font-size: 13px; color: #aaa; margin-bottom: 15px;" id="modal-subtitle">Level 1 Race Class</div>
+            
+            <div class="derived-stats" style="margin-bottom: 15px; padding: 10px;">
+                <div class="d-stat"><div class="d-val" id="modal-hp">10</div><div class="d-lbl">Max HP</div></div>
+                <div class="d-stat"><div class="d-val" id="modal-ac">10</div><div class="d-lbl">AC</div></div>
+                <div class="d-stat"><div class="d-val" id="modal-prof">+2</div><div class="d-lbl">Prof Bonus</div></div>
+                <div class="d-stat"><div class="d-val" id="modal-exp">0</div><div class="d-lbl">EXP</div></div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                <div>
+                    <h4 style="margin: 0 0 5px 0; border-bottom: 1px solid #444;">Attributes</h4>
+                    <div id="modal-attributes" style="font-size: 13px; line-height: 1.6;"></div>
+                </div>
+                <div>
+                    <h4 style="margin: 0 0 5px 0; border-bottom: 1px solid #444;">Equipment & Proficiencies</h4>
+                    <div id="modal-equipment" style="font-size: 13px; line-height: 1.6; color: #a8e6cf;"></div>
+                </div>
+            </div>
+
+            <h4 style="margin: 0 0 5px 0; border-bottom: 1px solid #444;">Background & Notes</h4>
+            <div id="modal-backstory" style="font-size: 13px; background: #111; padding: 10px; border-radius: 4px; font-style: italic; max-height: 100px; overflow-y: auto;"></div>
+        </div>
+    </div>
 
     <div id="auth-screen" class="screen active-screen">
         <div class="menu-box small-box">
@@ -98,7 +139,7 @@
             <button onclick="joinCampaign()" style="background: #e67e22;">Join Campaign</button>
 
             <hr style="border-color: #333; margin: 15px 0;">
-            <h4 style="margin-top:0; color:#aaa;">Upload SRD/Rulebook (PDF/TXT)</h4>
+            <h4 style="margin-top:0; color:#aaa;" title="Upload the D&D 5e SRD to give the AI Master memory of the rules.">Upload SRD/Rulebook ⓘ</h4>
             <input type="file" id="rule-file" accept=".txt,.pdf">
             <button onclick="uploadRules()" style="background: #8e44ad; font-size: 12px; padding: 8px;">Upload to AI Memory</button>
             <div id="lobby-msg" style="color: #e74c3c; margin-top: 10px; font-size: 14px;"></div>
@@ -114,12 +155,12 @@
             
             <div class="sheet-grid">
                 <div>
-                    <label style="font-size: 12px; color: #888;">Identity</label>
+                    <label style="font-size: 12px; color: #888;" title="The name you will be known by.">Identity ⓘ</label>
                     <input type="text" id="char-name" placeholder="Character Name">
                     
                     <div style="display: flex; gap: 10px;">
                         <div style="flex-grow: 1;">
-                            <label style="font-size: 12px; color: #888;">Race</label>
+                            <label style="font-size: 12px; color: #888;" title="Race determines your innate abilities and attribute bonuses.">Race ⓘ</label>
                             <select id="char-race" onchange="calcStats()">
                                 <option value="Human">Human (+1 All)</option>
                                 <option value="Elf">Elf (+2 DEX)</option>
@@ -131,8 +172,8 @@
                             </select>
                         </div>
                         <div style="flex-grow: 1;">
-                            <label style="font-size: 12px; color: #888;">Class</label>
-                            <select id="char-class" onchange="calcStats()">
+                            <label style="font-size: 12px; color: #888;" title="Class determines your hit points, proficiencies, and available equipment.">Class ⓘ</label>
+                            <select id="char-class" onchange="updateClassOptions()">
                                 <option value="Barbarian">Barbarian (d12)</option>
                                 <option value="Bard">Bard (d8)</option>
                                 <option value="Cleric">Cleric (d8)</option>
@@ -151,25 +192,30 @@
 
                     <div style="display: flex; gap: 10px;">
                         <div style="flex-grow: 1;">
+                            <label style="font-size: 12px; color: #888;" title="Select your starting weapon based on your class.">Weapon ⓘ</label>
+                            <select id="char-weapon"></select>
+                        </div>
+                        <div style="flex-grow: 1;">
+                            <label style="font-size: 12px; color: #888;" title="Select your starting armor.">Armor ⓘ</label>
+                            <select id="char-armor" onchange="calcStats()"></select>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 10px;">
+                        <div style="flex-grow: 1;">
                             <label style="font-size: 12px; color: #888;">Background</label>
                             <select id="char-background">
-                                <option value="Acolyte">Acolyte</option>
-                                <option value="Criminal">Criminal</option>
-                                <option value="Folk Hero">Folk Hero</option>
-                                <option value="Noble">Noble</option>
-                                <option value="Sage">Sage</option>
-                                <option value="Soldier">Soldier</option>
+                                <option value="Acolyte">Acolyte</option><option value="Criminal">Criminal</option>
+                                <option value="Folk Hero">Folk Hero</option><option value="Noble">Noble</option>
+                                <option value="Sage">Sage</option><option value="Soldier">Soldier</option>
                             </select>
                         </div>
                         <div style="flex-grow: 1;">
                             <label style="font-size: 12px; color: #888;">Alignment</label>
                             <select id="char-alignment">
-                                <option value="Lawful Good">Lawful Good</option>
-                                <option value="Neutral Good">Neutral Good</option>
-                                <option value="Chaotic Good">Chaotic Good</option>
-                                <option value="True Neutral">True Neutral</option>
-                                <option value="Chaotic Neutral">Chaotic Neutral</option>
-                                <option value="Lawful Evil">Lawful Evil</option>
+                                <option value="Lawful Good">Lawful Good</option><option value="Neutral Good">Neutral Good</option>
+                                <option value="Chaotic Good">Chaotic Good</option><option value="True Neutral">True Neutral</option>
+                                <option value="Chaotic Neutral">Chaotic Neutral</option><option value="Lawful Evil">Lawful Evil</option>
                                 <option value="Chaotic Evil">Chaotic Evil</option>
                             </select>
                         </div>
@@ -178,25 +224,28 @@
 
                 <div>
                     <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom:5px;">
-                        <label style="font-size: 12px; color: #888;">Ability Scores</label>
+                        <label style="font-size: 12px; color: #888;" title="Base abilities before racial modifiers. You may re-roll a maximum of 3 times.">Ability Scores ⓘ</label>
                         <div class="gen-methods">
                             <button class="gen-btn active" id="btn-std" onclick="setGenMethod('std')">Standard Array</button>
-                            <button class="gen-btn" id="btn-roll" onclick="setGenMethod('roll')">Roll 4d6</button>
-                            <button class="gen-btn" id="btn-man" onclick="setGenMethod('man')">Manual</button>
+                            <button class="gen-btn" id="btn-roll" onclick="setGenMethod('roll')">Roll 4d6 (3 Left)</button>
+                            <button class="gen-btn" id="btn-man" onclick="setGenMethod('man')">Manual Edit</button>
                         </div>
                     </div>
                     <div id="attr-container"></div>
                 </div>
             </div>
 
+            <label style="font-size: 12px; color: #888; display: block; text-align: left; margin-bottom: 5px;" title="Check the boxes for skills you are proficient in based on your class.">Skill Proficiencies <span id="skill-limit-text" style="color:#e74c3c;">(Choose 2)</span> ⓘ</label>
+            <div id="skills-container" class="skills-container"></div>
+
             <div class="derived-stats">
-                <div class="d-stat"><div class="d-val" id="disp-hp">10</div><div class="d-lbl">Max HP</div></div>
-                <div class="d-stat"><div class="d-val" id="disp-ac">10</div><div class="d-lbl">Armor Class</div></div>
-                <div class="d-stat"><div class="d-val">+2</div><div class="d-lbl">Proficiency</div></div>
-                <div class="d-stat"><div class="d-val" id="disp-init">+0</div><div class="d-lbl">Initiative</div></div>
+                <div class="d-stat" title="Maximum Hit Points based on Hit Dice + Constitution Modifier"><div class="d-val" id="disp-hp">10</div><div class="d-lbl">Max HP ⓘ</div></div>
+                <div class="d-stat" title="Armor Class based on equipped armor + Dexterity Modifier (if applicable)"><div class="d-val" id="disp-ac">10</div><div class="d-lbl">Armor Class ⓘ</div></div>
+                <div class="d-stat" title="Bonus added to rolls for skills/weapons you are proficient in (+2 at Level 1)"><div class="d-val">+2</div><div class="d-lbl">Proficiency ⓘ</div></div>
+                <div class="d-stat" title="Added to Initiative rolls (equal to Dexterity Modifier)"><div class="d-val" id="disp-init">+0</div><div class="d-lbl">Initiative ⓘ</div></div>
             </div>
 
-            <textarea id="char-backstory" placeholder="Backstory & Inventory: Detail your starting weapons, armor, tools, and personal history here so the AI DM knows what you are carrying..." style="height: 80px;"></textarea>
+            <textarea id="char-backstory" placeholder="Backstory & Additional Notes: This is the ONLY free-text field. The AI DM will read this to understand your character's motivations and non-standard inventory..." style="height: 60px;"></textarea>
             <button onclick="submitCharacter()" style="background: #2ecc71; font-size: 16px;">Finalize & Enter Campaign</button>
             <div id="char-msg" style="color: #e74c3c; margin-top: 10px; font-size: 14px;"></div>
         </div>
@@ -219,7 +268,7 @@
                 <button id="start-session-btn" onclick="startAiSession()" style="display:none; margin-top:10px; background: #f1c40f; color: black;">Start Session (AI)</button>
             </div>
 
-            <h3 id="party-header" style="margin-top: 0;">Campaign Party</h3>
+            <h3 id="party-header" style="margin-top: 0;" title="Click any character card to view their full Character Sheet.">Campaign Party ⓘ</h3>
             <div id="char-list"></div>
         </div>
         <div id="center-panel" class="panel">
@@ -257,23 +306,38 @@
     </div>
 
     <script>
-        let currentCampaignId = null;
-        let currentCampaignName = "";
-        let myCharacter = null;
-        let ws = null;
-        let finalStats = {}; 
-        let globalReadyStates = {};
+        // --- DATA & STATE ---
+        let currentCampaignId = null; let currentCampaignName = "";
+        let myCharacter = null; let ws = null;
+        let finalStats = {}; let globalReadyStates = {}; let partyDataCache = {};
+        let rollsRemaining = 3;
+        
+        const attributes = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
+        const standardArray = [15, 14, 13, 12, 10, 8];
+        let currentGenMethod = 'std'; // std, roll, man
 
+        const classEquipmentData = {
+            Barbarian: { weapons: ['Greataxe', 'Two Handaxes'], armor: ['Unarmored (AC 10)'], skills: 2, choices: ['Animal Handling', 'Athletics', 'Intimidation', 'Nature', 'Perception', 'Survival'] },
+            Bard: { weapons: ['Rapier', 'Longsword', 'Simple Weapon'], armor: ['Leather Armor (AC 11)'], skills: 3, choices: ['Acrobatics', 'Arcana', 'Athletics', 'Deception', 'History', 'Insight', 'Intimidation', 'Investigation', 'Medicine', 'Nature', 'Perception', 'Performance', 'Persuasion', 'Religion', 'Sleight of Hand', 'Stealth', 'Survival'] },
+            Cleric: { weapons: ['Mace', 'Warhammer'], armor: ['Scale Mail (AC 14)', 'Leather Armor (AC 11)', 'Chain Mail (AC 16)'], skills: 2, choices: ['History', 'Insight', 'Medicine', 'Persuasion', 'Religion'] },
+            Druid: { weapons: ['Wooden Shield & Scimitar', 'Quarterstaff'], armor: ['Leather Armor (AC 11)'], skills: 2, choices: ['Arcana', 'Animal Handling', 'Insight', 'Medicine', 'Nature', 'Perception', 'Religion', 'Survival'] },
+            Fighter: { weapons: ['Longsword & Shield', 'Greatsword', 'Two Handaxes'], armor: ['Chain Mail (AC 16)', 'Leather Armor (AC 11)'], skills: 2, choices: ['Acrobatics', 'Animal Handling', 'Athletics', 'History', 'Insight', 'Intimidation', 'Perception', 'Survival'] },
+            Monk: { weapons: ['Shortsword', 'Quarterstaff'], armor: ['Unarmored (AC 10)'], skills: 2, choices: ['Acrobatics', 'Athletics', 'History', 'Insight', 'Religion', 'Stealth'] },
+            Paladin: { weapons: ['Longsword & Shield', 'Greatsword'], armor: ['Chain Mail (AC 16)'], skills: 2, choices: ['Athletics', 'Insight', 'Intimidation', 'Medicine', 'Persuasion', 'Religion'] },
+            Ranger: { weapons: ['Two Shortswords', 'Longbow'], armor: ['Scale Mail (AC 14)', 'Leather Armor (AC 11)'], skills: 3, choices: ['Animal Handling', 'Athletics', 'Insight', 'Investigation', 'Nature', 'Perception', 'Stealth', 'Survival'] },
+            Rogue: { weapons: ['Rapier', 'Shortsword', 'Shortbow'], armor: ['Leather Armor (AC 11)'], skills: 4, choices: ['Acrobatics', 'Athletics', 'Deception', 'Insight', 'Intimidation', 'Investigation', 'Perception', 'Performance', 'Persuasion', 'Sleight of Hand', 'Stealth'] },
+            Sorcerer: { weapons: ['Light Crossbow', 'Dagger'], armor: ['Unarmored (AC 10)'], skills: 2, choices: ['Arcana', 'Deception', 'Insight', 'Intimidation', 'Persuasion', 'Religion'] },
+            Warlock: { weapons: ['Light Crossbow', 'Simple Weapon'], armor: ['Leather Armor (AC 11)'], skills: 2, choices: ['Arcana', 'Deception', 'History', 'Intimidation', 'Investigation', 'Nature', 'Religion'] },
+            Wizard: { weapons: ['Quarterstaff', 'Dagger'], armor: ['Unarmored (AC 10)'], skills: 2, choices: ['Arcana', 'History', 'Insight', 'Investigation', 'Medicine', 'Religion'] }
+        };
+
+        // --- AUTH & NETWORK ---
         async function authFetch(url, options = {}) {
             const token = localStorage.getItem('vtt_token');
             if (!options.headers) options.headers = {};
             options.headers['Authorization'] = `Bearer ${token}`;
-            
             const res = await fetch(url, options);
-            if (res.status === 401) {
-                logout(true);
-                throw new Error("Unauthorized access.");
-            }
+            if (res.status === 401) { logout(true); throw new Error("Unauthorized"); }
             return res;
         }
 
@@ -287,17 +351,10 @@
         }
 
         function showScreen(screenId) {
-            document.querySelectorAll('.screen, #vtt-screen').forEach(el => {
-                el.classList.remove('active-screen');
-                el.style.display = ''; 
-            });
+            document.querySelectorAll('.screen, #vtt-screen').forEach(el => { el.classList.remove('active-screen'); el.style.display = ''; });
             document.getElementById('vtt-screen').style.display = 'none';
-
-            if (screenId === 'vtt-screen') {
-                document.getElementById('vtt-screen').style.display = 'flex';
-            } else {
-                document.getElementById(screenId).classList.add('active-screen');
-            }
+            if (screenId === 'vtt-screen') document.getElementById('vtt-screen').style.display = 'flex';
+            else document.getElementById(screenId).classList.add('active-screen');
         }
 
         async function register() {
@@ -306,28 +363,20 @@
                 body: JSON.stringify({username: document.getElementById('auth-user').value, password: document.getElementById('auth-pass').value})
             });
             if (res.ok) {
-                document.getElementById('auth-msg').innerText = "Registered! Now login.";
-                document.getElementById('auth-msg').style.color = "#2ecc71";
+                document.getElementById('auth-msg').innerText = "Registered! Now login."; document.getElementById('auth-msg').style.color = "#2ecc71";
             } else {
-                document.getElementById('auth-msg').innerText = (await res.json()).detail || "Error";
-                document.getElementById('auth-msg').style.color = "#e74c3c";
+                document.getElementById('auth-msg').innerText = (await res.json()).detail || "Error"; document.getElementById('auth-msg').style.color = "#e74c3c";
             }
         }
 
         async function login() {
             const formData = new URLSearchParams(); 
-            formData.append('username', document.getElementById('auth-user').value); 
-            formData.append('password', document.getElementById('auth-pass').value);
-            const res = await fetch('/api/auth/login', {
-                method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: formData
-            });
+            formData.append('username', document.getElementById('auth-user').value); formData.append('password', document.getElementById('auth-pass').value);
+            const res = await fetch('/api/auth/login', { method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: formData });
             if (res.ok) {
-                localStorage.setItem('vtt_token', (await res.json()).access_token);
-                document.getElementById('auth-msg').innerText = "";
-                loadDashboard();
+                localStorage.setItem('vtt_token', (await res.json()).access_token); document.getElementById('auth-msg').innerText = ""; loadDashboard();
             } else {
-                document.getElementById('auth-msg').innerText = "Invalid credentials";
-                document.getElementById('auth-msg').style.color = "#e74c3c";
+                document.getElementById('auth-msg').innerText = "Invalid credentials"; document.getElementById('auth-msg').style.color = "#e74c3c";
             }
         }
 
@@ -341,18 +390,13 @@
                     const campaigns = await res.json();
                     const list = document.getElementById('dashboard-list');
                     list.innerHTML = '';
-                    if (campaigns.length === 0) {
-                        list.innerHTML = '<div style="color:#aaa; font-style:italic;">No campaigns yet. Create or join one!</div>';
-                    }
+                    if (campaigns.length === 0) list.innerHTML = '<div style="color:#aaa; font-style:italic;">No campaigns yet. Create or join one!</div>';
                     campaigns.forEach(c => {
                         const codeDisp = ` <span style="font-size:10px; color:#aaa;">(Code: ${c.invite_code})</span>`;
                         const safeName = c.name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
                         list.innerHTML += `
                             <div class="camp-list-item">
-                                <div>
-                                    <b>${c.name}</b>${codeDisp}<br>
-                                    <span class="camp-badge">${c.role}</span>
-                                </div>
+                                <div><b>${c.name}</b>${codeDisp}<br><span class="camp-badge">${c.role}</span></div>
                                 <button onclick="enterCampaign(${c.id}, '${safeName}')" style="width: 80px; margin: 0; background: #2ecc71;">Launch</button>
                             </div>
                         `;
@@ -364,28 +408,17 @@
         async function uploadRules() {
             const fileInput = document.getElementById('rule-file');
             if (fileInput.files.length === 0) return alert("Select a file first.");
-            
-            const formData = new FormData();
-            formData.append("file", fileInput.files[0]);
-            
+            const formData = new FormData(); formData.append("file", fileInput.files[0]);
             const msgEl = document.getElementById('lobby-msg');
-            msgEl.style.color = "#4facfe";
-            msgEl.innerText = "Processing rulebook...";
+            msgEl.style.color = "#4facfe"; msgEl.innerText = "Processing rulebook in background...";
             
             const token = localStorage.getItem('vtt_token');
-            const res = await fetch('/api/upload-rules', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` },
-                body: formData
-            });
+            const res = await fetch('/api/upload-rules', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData });
             
             if (res.ok) {
-                const data = await res.json();
-                msgEl.style.color = "#2ecc71";
-                msgEl.innerText = data.message;
+                msgEl.style.color = "#2ecc71"; msgEl.innerText = (await res.json()).message;
             } else {
-                msgEl.style.color = "#e74c3c";
-                msgEl.innerText = "Upload failed.";
+                msgEl.style.color = "#e74c3c"; msgEl.innerText = "Upload failed.";
             }
         }
 
@@ -397,10 +430,7 @@
                 const res = await authFetch('/api/campaigns', {
                     method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: name, ai_dm: isAiDm})
                 });
-                if (res.ok) {
-                    const data = await res.json();
-                    enterCampaign(data.id, data.name);
-                }
+                if (res.ok) { const data = await res.json(); enterCampaign(data.id, data.name); }
             } catch (e) { }
         }
 
@@ -409,19 +439,44 @@
             if(!code) return;
             try {
                 const res = await authFetch(`/api/campaigns/join/${code}`, { method: 'POST' });
-                if (res.ok) {
-                    const data = await res.json();
-                    enterCampaign(data.campaign_id, data.campaign_name);
-                } else {
-                    document.getElementById('lobby-msg').innerText = "Invalid invite code.";
-                }
+                if (res.ok) { const data = await res.json(); enterCampaign(data.campaign_id, data.campaign_name); } 
+                else { document.getElementById('lobby-msg').innerText = "Invalid invite code."; }
             } catch (e) { }
         }
 
-        // --- CHARACTER CREATOR OVERHAUL ---
-        const attributes = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
-        const standardArray = [15, 14, 13, 12, 10, 8];
-        let currentGenMethod = 'std'; // std, roll, man
+        // --- CHARACTER CREATOR ---
+        function updateClassOptions() {
+            const charClass = document.getElementById('char-class').value;
+            const data = classEquipmentData[charClass];
+            
+            // Update Weapons
+            const wSelect = document.getElementById('char-weapon');
+            wSelect.innerHTML = data.weapons.map(w => `<option value="${w}">${w}</option>`).join('');
+            
+            // Update Armor
+            const aSelect = document.getElementById('char-armor');
+            aSelect.innerHTML = data.armor.map(a => `<option value="${a}">${a}</option>`).join('');
+
+            // Update Skills
+            const sContainer = document.getElementById('skills-container');
+            sContainer.innerHTML = data.choices.map(s => `
+                <label class="skill-item" title="Class skill option">
+                    <input type="checkbox" value="${s}" onchange="checkSkillLimit(this)"> ${s}
+                </label>
+            `).join('');
+            
+            document.getElementById('skill-limit-text').innerText = `(Choose ${data.skills})`;
+            document.getElementById('skill-limit-text').dataset.limit = data.skills;
+
+            calcStats();
+        }
+
+        function checkSkillLimit(checkbox) {
+            const limit = parseInt(document.getElementById('skill-limit-text').dataset.limit);
+            const checked = document.querySelectorAll('#skills-container input:checked').length;
+            if (checked > limit) { checkbox.checked = false; alert(`You can only select ${limit} skills for this class.`); }
+            calcStats();
+        }
 
         function buildAttrUI() {
             const container = document.getElementById('attr-container');
@@ -433,6 +488,7 @@
                     let options = standardArray.map(val => `<option value="${val}" ${val===standardArray[idx]?'selected':''}>${val}</option>`).join('');
                     inputHtml = `<select class="attr-input" id="base-${attr}" onchange="calcStats()">${options}</select>`;
                 } else if (currentGenMethod === 'roll') {
+                    // LOCKED INPUT
                     inputHtml = `<input type="number" class="attr-input" id="base-${attr}" value="10" readonly>`;
                 } else {
                     inputHtml = `<input type="number" class="attr-input" id="base-${attr}" value="10" min="3" max="20" onchange="calcStats()">`;
@@ -440,7 +496,7 @@
 
                 container.innerHTML += `
                     <div class="attr-row">
-                        <div class="attr-label">${attr}</div>
+                        <div class="attr-label" title="Base Attribute Score">${attr}</div>
                         ${inputHtml}
                         <div style="font-size:10px; color:#888;">Base</div>
                         <div class="attr-result" id="res-${attr}">10</div>
@@ -451,12 +507,18 @@
         }
 
         function setGenMethod(method) {
+            if (method === 'roll' && rollsRemaining <= 0) return; // Prevent clicking if out of rolls
+            
             currentGenMethod = method;
             document.querySelectorAll('.gen-btn').forEach(b => b.classList.remove('active'));
             document.getElementById(`btn-${method}`).classList.add('active');
             buildAttrUI();
 
             if (method === 'roll') {
+                rollsRemaining--;
+                document.getElementById('btn-roll').innerText = `Roll 4d6 (${rollsRemaining} Left)`;
+                if (rollsRemaining <= 0) document.getElementById('btn-roll').disabled = true;
+
                 attributes.forEach(attr => {
                     let rolls = [Math.floor(Math.random()*6)+1, Math.floor(Math.random()*6)+1, Math.floor(Math.random()*6)+1, Math.floor(Math.random()*6)+1].sort((a,b)=>b-a);
                     let sum = rolls[0] + rolls[1] + rolls[2];
@@ -498,6 +560,15 @@
                 if (attr === 'DEX') dexMod = mod;
             });
 
+            // Extract AC from string "Chain Mail (AC 16)" -> 16
+            const armorStr = document.getElementById('char-armor').value || "Unarmored (AC 10)";
+            const match = armorStr.match(/AC (\d+)/);
+            let baseAc = match ? parseInt(match[1]) : 10;
+            
+            // Add DEX to light/medium armors (simplified logic)
+            if (armorStr.includes('Leather') || armorStr.includes('Unarmored')) baseAc += dexMod;
+            if (armorStr.includes('Scale')) baseAc += Math.min(2, dexMod);
+
             let baseHp = 10; 
             if (charClass === 'Barbarian') baseHp = 12;
             if (charClass === 'Fighter' || charClass === 'Paladin' || charClass === 'Ranger') baseHp = 10;
@@ -505,11 +576,12 @@
             if (charClass === 'Sorcerer' || charClass === 'Wizard') baseHp = 6;
             
             const maxHp = baseHp + conMod;
-            const ac = 10 + dexMod;
 
             document.getElementById('disp-hp').innerText = maxHp;
-            document.getElementById('disp-ac').innerText = ac;
+            document.getElementById('disp-ac').innerText = baseAc;
             document.getElementById('disp-init').innerText = dexMod >= 0 ? `+${dexMod}` : `${dexMod}`;
+
+            const selectedSkills = Array.from(document.querySelectorAll('#skills-container input:checked')).map(cb => cb.value);
 
             finalStats.race = race;
             finalStats.char_class = charClass;
@@ -517,7 +589,14 @@
             finalStats.alignment = document.getElementById('char-alignment').value;
             finalStats.level = 1;
             finalStats.hp = maxHp;
-            finalStats.ac = ac;
+            finalStats.ac = baseAc;
+            finalStats.prof_bonus = 2;
+            finalStats.exp = 0;
+            finalStats.equipment = {
+                weapon: document.getElementById('char-weapon').value,
+                armor: armorStr
+            };
+            finalStats.skills = selectedSkills;
         }
 
         async function enterCampaign(id, name) {
@@ -530,8 +609,9 @@
                 } else {
                     document.getElementById('char-msg').innerText = "";
                     showScreen('char-screen');
-                    buildAttrUI();
-                    calcStats(); 
+                    rollsRemaining = 3; document.getElementById('btn-roll').innerText = `Roll 4d6 (3 Left)`; document.getElementById('btn-roll').disabled = false;
+                    currentGenMethod = 'std';
+                    buildAttrUI(); updateClassOptions(); calcStats(); 
                 }
             } catch (e) { }
         }
@@ -541,24 +621,17 @@
                 name: document.getElementById('char-name').value || "Unnamed Hero",
                 campaign_id: currentCampaignId,
                 stats: finalStats,
-                backstory: document.getElementById('char-backstory').value || "A generic adventurer."
+                backstory: document.getElementById('char-backstory').value || "No specific backstory provided."
             };
             try {
-                const res = await authFetch('/api/character', {
-                    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
-                });
-                if (res.ok) {
-                    myCharacter = await res.json();
-                    launchVTT();
-                } else {
-                    document.getElementById('char-msg').innerText = "Failed to create character.";
-                }
+                const res = await authFetch('/api/character', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
+                if (res.ok) { myCharacter = await res.json(); launchVTT(); } 
+                else { document.getElementById('char-msg').innerText = "Failed to create character."; }
             } catch (e) { }
         }
 
         async function loadChatHistory() {
-            const log = document.getElementById('chat-log');
-            log.innerHTML = '';
+            const log = document.getElementById('chat-log'); log.innerHTML = '';
             try {
                 const res = await authFetch(`/api/campaigns/${currentCampaignId}/chat-history`);
                 if (res.ok) {
@@ -579,76 +652,72 @@
             if (myCharacter && myCharacter.role === 'DM') {
                 document.getElementById('party-header').innerText = "DM Control Panel";
                 chatTypeSelect.innerHTML = `<option value="party">💬 Speak as DM</option>`;
-                document.getElementById('dm-controls').style.display = 'block';
-                document.getElementById('player-controls').style.display = 'none';
+                document.getElementById('dm-controls').style.display = 'block'; document.getElementById('player-controls').style.display = 'none';
             } else {
-                document.getElementById('party-header').innerText = "Campaign Party";
-                chatTypeSelect.innerHTML = `
-                    <option value="action">🎲 Take Action (Triggers AI DM)</option>
-                    <option value="party">💬 Talk to Party (Chat Only)</option>
-                `;
-                document.getElementById('dm-controls').style.display = 'none';
-                document.getElementById('player-controls').style.display = 'block';
-                document.getElementById('ready-toggle').checked = false;
-                document.getElementById('ready-text').innerHTML = "❌ Not Ready";
+                document.getElementById('party-header').innerText = "Campaign Party ⓘ";
+                chatTypeSelect.innerHTML = `<option value="action">🎲 Take Action (Triggers AI DM)</option><option value="party">💬 Talk to Party (Chat Only)</option>`;
+                document.getElementById('dm-controls').style.display = 'none'; document.getElementById('player-controls').style.display = 'block';
+                document.getElementById('ready-toggle').checked = false; document.getElementById('ready-text').innerHTML = "❌ Not Ready";
             }
 
-            showScreen('vtt-screen');
-            loadChatHistory(); 
-            initWebSocket();
-            loadParty();
+            showScreen('vtt-screen'); loadChatHistory(); initWebSocket(); loadParty();
         }
 
-        // --- VTT DICE ROLLER ---
+        // --- DICE & VTT INTERACTION ---
         function rollVttDice(sides) {
             const result = Math.floor(Math.random() * sides) + 1;
-            const msg = `[Rolled 1d${sides}] Result: ${result}`;
-            document.getElementById('chat-input').value = msg;
-            document.getElementById('chat-type').value = "action"; // Auto set to action
+            document.getElementById('chat-input').value = `[Rolled 1d${sides}] Result: ${result}`;
+            document.getElementById('chat-type').value = "action";
         }
 
         function submitManualDice() {
             const val = document.getElementById('manual-dice').value;
             if(!val) return;
-            const msg = `[Manual Roll Entered] Result: ${val}`;
-            document.getElementById('chat-input').value = msg;
-            document.getElementById('chat-type').value = "action"; // Auto set to action
-            document.getElementById('manual-dice').value = '';
+            document.getElementById('chat-input').value = `[Manual Roll Entered] Result: ${val}`;
+            document.getElementById('chat-type').value = "action"; document.getElementById('manual-dice').value = '';
         }
 
         function toggleReady() {
             const isReady = document.getElementById('ready-toggle').checked;
             document.getElementById('ready-text').innerHTML = isReady ? "✅ Ready" : "❌ Not Ready";
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({type: "ready_toggle", character_name: myCharacter.name, is_ready: isReady}));
-            }
+            if (ws && ws.readyState === WebSocket.OPEN) { ws.send(JSON.stringify({type: "ready_toggle", character_name: myCharacter.name, is_ready: isReady})); }
         }
 
         async function startAiSession() {
             document.getElementById('start-session-btn').style.display = 'none';
-            const msg = "We are all ready to begin! Please introduce the campaign setting and our starting situation.";
             const log = document.getElementById('chat-log');
-            log.innerHTML += `<div id="typing" class="msg-ai" style="opacity: 0.5;"><i>DM is preparing the session...</i></div>`;
-            log.scrollTop = log.scrollHeight;
-            try {
-                await authFetch('/api/chat', {
-                    method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ campaign_id: currentCampaignId, message: msg, character_name: "Party" })
-                });
-            } catch(e) {}
+            log.innerHTML += `<div id="typing" class="msg-ai" style="opacity: 0.5;"><i>DM is preparing the session...</i></div>`; log.scrollTop = log.scrollHeight;
+            try { await authFetch('/api/chat', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ campaign_id: currentCampaignId, message: "We are all ready to begin! Please introduce the campaign setting.", character_name: "Party" }) }); } catch(e) {}
         }
 
         async function generateStoryOutline() {
-            const btn = document.querySelector('#dm-controls button');
-            btn.innerText = "Generating...";
-            btn.disabled = true;
-            try {
-                await authFetch(`/api/campaigns/${currentCampaignId}/generate-outline`, { method: 'POST' });
-                btn.innerText = "Outline Generated!";
-            } catch(e) {
-                btn.innerText = "Error Generating";
-            }
+            const btn = document.querySelector('#dm-controls button'); btn.innerText = "Generating..."; btn.disabled = true;
+            try { await authFetch(`/api/campaigns/${currentCampaignId}/generate-outline`, { method: 'POST' }); btn.innerText = "Outline Generated!"; } 
+            catch(e) { btn.innerText = "Error Generating"; }
             setTimeout(() => { btn.innerText = "Generate AI Story Outline"; btn.disabled = false; }, 3000);
+        }
+
+        function showCharacterSheet(charName) {
+            const char = partyDataCache[charName];
+            if (!char || !char.stats) return;
+            const stats = typeof char.stats === 'string' ? JSON.parse(char.stats) : char.stats;
+
+            document.getElementById('modal-name').innerText = char.name;
+            document.getElementById('modal-subtitle').innerText = `Level ${stats.level || 1} ${stats.race || ''} ${stats.char_class || ''} (${stats.alignment || 'Neutral'})`;
+            document.getElementById('modal-hp').innerText = stats.hp || 0;
+            document.getElementById('modal-ac').innerText = stats.ac || 0;
+            document.getElementById('modal-prof').innerText = `+${stats.prof_bonus || 2}`;
+            document.getElementById('modal-exp').innerText = stats.exp || 0;
+
+            const attrHtml = attributes.map(a => `<b>${a}:</b> ${stats[a]} (${stats[`${a}_mod`]})`).join('<br>');
+            document.getElementById('modal-attributes').innerHTML = attrHtml;
+
+            const equip = stats.equipment || {weapon: 'Unarmed', armor: 'Unarmored'};
+            const skills = (stats.skills || []).join(', ');
+            document.getElementById('modal-equipment').innerHTML = `<b>Weapon:</b> ${equip.weapon}<br><b>Armor:</b> ${equip.armor}<br><br><b>Proficient Skills:</b><br>${skills || 'None'}`;
+
+            document.getElementById('modal-backstory').innerText = char.backstory || "No backstory provided.";
+            document.getElementById('char-sheet-modal').style.display = 'flex';
         }
 
         async function loadParty() {
@@ -659,145 +728,95 @@
                 const list = document.getElementById('char-list');
                 list.innerHTML = '';
                 
-                let allPlayersReady = true;
-                let playerCount = 0;
+                let allPlayersReady = true; let playerCount = 0;
 
                 chars.forEach(c => {
+                    partyDataCache[c.name] = c; // Save for modal view
                     const stats = typeof c.stats === 'string' ? JSON.parse(c.stats) : (c.stats || {});
                     const border = (myCharacter && c.name === myCharacter.name) ? 'border-left: 4px solid #2ecc71;' : 'border-left: 4px solid #3498db;';
                     
                     const isReady = globalReadyStates[c.name];
-                    if (!isReady) allPlayersReady = false;
-                    playerCount++;
+                    if (!isReady) allPlayersReady = false; playerCount++;
 
                     const badgeStyle = isReady ? "display: block;" : "display: none;";
 
                     list.innerHTML += `
-                        <div class="char-card" style="${border}">
+                        <div class="char-card" style="${border}" onclick="showCharacterSheet('${c.name.replace(/'/g, "\\'")}')" title="Click to view full character sheet">
                             <div class="ready-badge" style="${badgeStyle}">✓</div>
                             <div class="char-card-header">
                                 <b style="font-size: 15px;">${c.name}</b>
                                 <span style="color: #aaa;">Lvl ${stats.level || 1} ${stats.race || ''} ${stats.char_class || ''}</span>
                             </div>
-                            <div style="margin-bottom: 8px; color: #fff;">
-                                ❤️ ${stats.hp || 0} HP &nbsp;&nbsp;|&nbsp;&nbsp; 🛡️ ${stats.ac || 0} AC
-                            </div>
+                            <div style="margin-bottom: 8px; color: #fff;">❤️ ${stats.hp || 0} HP &nbsp;&nbsp;|&nbsp;&nbsp; 🛡️ ${stats.ac || 0} AC</div>
                             <div class="char-card-stats">
-                                <div class="stat-badge">STR: ${stats.STR || 10}</div>
-                                <div class="stat-badge">DEX: ${stats.DEX || 10}</div>
-                                <div class="stat-badge">CON: ${stats.CON || 10}</div>
-                                <div class="stat-badge">INT: ${stats.INT || 10}</div>
-                                <div class="stat-badge">WIS: ${stats.WIS || 10}</div>
-                                <div class="stat-badge">CHA: ${stats.CHA || 10}</div>
+                                <div class="stat-badge">STR: ${stats.STR || 10}</div><div class="stat-badge">DEX: ${stats.DEX || 10}</div><div class="stat-badge">CON: ${stats.CON || 10}</div>
+                                <div class="stat-badge">INT: ${stats.INT || 10}</div><div class="stat-badge">WIS: ${stats.WIS || 10}</div><div class="stat-badge">CHA: ${stats.CHA || 10}</div>
                             </div>
                         </div>
                     `;
                 });
 
                 const btn = document.getElementById('start-session-btn');
-                if (playerCount > 0 && allPlayersReady && myCharacter && myCharacter.role !== 'DM') {
-                    btn.style.display = 'block';
-                } else {
-                    btn.style.display = 'none';
-                }
+                if (playerCount > 0 && allPlayersReady && myCharacter && myCharacter.role !== 'DM') btn.style.display = 'block'; else btn.style.display = 'none';
 
             } catch(e) {}
         }
 
-        const canvas = document.getElementById('map');
-        const ctx = canvas.getContext('2d');
-        let tokens = {}; let draggingToken = null;
+        const canvas = document.getElementById('map'); const ctx = canvas.getContext('2d'); let tokens = {}; let draggingToken = null;
 
         function initWebSocket() {
             if (ws) ws.close();
-            const token = localStorage.getItem('vtt_token');
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            
+            const token = localStorage.getItem('vtt_token'); const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             ws = new WebSocket(`${protocol}//${window.location.host}/ws/map/${currentCampaignId}?token=${token}`);
             
             ws.onmessage = (event) => {
                 const payload = JSON.parse(event.data);
-                
-                if (payload.type === 'system' && payload.action === 'reload_party') {
-                    loadParty();
-                }
-
-                if (payload.type === 'ready_update') {
-                    globalReadyStates = payload.states;
-                    loadParty();
-                }
-
+                if (payload.type === 'system' && payload.action === 'reload_party') loadParty();
+                if (payload.type === 'ready_update') { globalReadyStates = payload.states; loadParty(); }
                 if (payload.type === 'state') {
-                    for (const id in payload.data) {
-                        if (draggingToken !== id) tokens[id] = payload.data[id];
-                    }
-                    drawMap();
+                    for (const id in payload.data) { if (draggingToken !== id) tokens[id] = payload.data[id]; } drawMap();
                 }
-
                 if (payload.type === 'chat') {
                     const log = document.getElementById('chat-log');
                     let colorClass = payload.role === 'ai' ? 'msg-ai' : (payload.role === 'user' ? 'msg-user' : 'msg-party');
-                    const typingEl = document.getElementById('typing');
-                    if (typingEl && payload.role === 'ai') typingEl.remove();
-
-                    log.innerHTML += `<div class="${colorClass}"><b>${payload.sender}:</b> ${payload.message}</div>`;
-                    log.scrollTop = log.scrollHeight;
+                    const typingEl = document.getElementById('typing'); if (typingEl && payload.role === 'ai') typingEl.remove();
+                    log.innerHTML += `<div class="${colorClass}"><b>${payload.sender}:</b> ${payload.message}</div>`; log.scrollTop = log.scrollHeight;
                 }
             };
         }
 
         function drawMap() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.strokeStyle = '#333';
-            for(let i = 0; i <= 600; i += 50) {
-                ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 600); ctx.stroke();
-                ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(600, i); ctx.stroke();
-            }
+            ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.strokeStyle = '#333';
+            for(let i = 0; i <= 600; i += 50) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 600); ctx.stroke(); ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(600, i); ctx.stroke(); }
             for (const [id, t] of Object.entries(tokens)) {
                 ctx.beginPath(); ctx.arc(t.x, t.y, 20, 0, Math.PI * 2); ctx.fillStyle = t.color; ctx.fill();
-                ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
-                ctx.fillStyle = '#111'; ctx.textAlign = "center"; ctx.font = "12px Arial";
-                ctx.fillText(id.substring(0,3).toUpperCase(), t.x, t.y + 4);
+                ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke(); ctx.fillStyle = '#111'; ctx.textAlign = "center"; ctx.font = "12px Arial"; ctx.fillText(id.substring(0,3).toUpperCase(), t.x, t.y + 4);
             }
         }
 
         canvas.addEventListener('mousedown', e => {
-            const rect = canvas.getBoundingClientRect();
-            const mx = e.clientX - rect.left; const my = e.clientY - rect.top;
-            
-            for (const [id, t] of Object.entries(tokens)) {
-                if (Math.hypot(mx - t.x, my - t.y) < 20) { draggingToken = id; return; }
-            }
-            
+            const rect = canvas.getBoundingClientRect(); const mx = e.clientX - rect.left; const my = e.clientY - rect.top;
+            for (const [id, t] of Object.entries(tokens)) { if (Math.hypot(mx - t.x, my - t.y) < 20) { draggingToken = id; return; } }
             if (myCharacter && myCharacter.role === 'DM') {
-                const enemyCount = Object.keys(tokens).filter(k => k.startsWith("NPC")).length + 1;
-                draggingToken = `NPC-${enemyCount}`;
-                tokens[draggingToken] = {x: mx, y: my, color: "#e74c3c"};
+                const enemyCount = Object.keys(tokens).filter(k => k.startsWith("NPC")).length + 1; draggingToken = `NPC-${enemyCount}`; tokens[draggingToken] = {x: mx, y: my, color: "#e74c3c"};
             } else if (myCharacter) {
-                draggingToken = myCharacter.name;
-                tokens[draggingToken] = {x: mx, y: my, color: "#3498db"};
+                draggingToken = myCharacter.name; tokens[draggingToken] = {x: mx, y: my, color: "#3498db"};
             }
             drawMap();
         });
 
         canvas.addEventListener('mousemove', e => {
             if (draggingToken && ws && ws.readyState === WebSocket.OPEN) {
-                const rect = canvas.getBoundingClientRect();
-                tokens[draggingToken].x = e.clientX - rect.left; tokens[draggingToken].y = e.clientY - rect.top;
-                drawMap();
+                const rect = canvas.getBoundingClientRect(); tokens[draggingToken].x = e.clientX - rect.left; tokens[draggingToken].y = e.clientY - rect.top; drawMap();
                 ws.send(JSON.stringify({type: "move", id: draggingToken, x: tokens[draggingToken].x, y: tokens[draggingToken].y}));
             }
         });
 
-        canvas.addEventListener('mouseup', () => draggingToken = null);
-        canvas.addEventListener('mouseleave', () => draggingToken = null);
+        canvas.addEventListener('mouseup', () => draggingToken = null); canvas.addEventListener('mouseleave', () => draggingToken = null);
 
         async function sendChat() {
-            const input = document.getElementById('chat-input');
-            const type = document.getElementById('chat-type').value;
-            const msg = input.value;
-            if(!msg) return;
-            input.value = '';
+            const input = document.getElementById('chat-input'); const type = document.getElementById('chat-type').value; const msg = input.value;
+            if(!msg) return; input.value = '';
 
             if (myCharacter.role === 'DM') {
                 ws.send(JSON.stringify({ type: "chat", sender: "Human DM", message: msg, role: "ai" }));
@@ -807,15 +826,8 @@
             } 
             else if (type === 'action') {
                 const log = document.getElementById('chat-log');
-                log.innerHTML += `<div id="typing" class="msg-ai" style="opacity: 0.5;"><i>DM is resolving action...</i></div>`;
-                log.scrollTop = log.scrollHeight;
-
-                try {
-                    await authFetch('/api/chat', {
-                        method: 'POST', headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ campaign_id: currentCampaignId, message: msg, character_name: myCharacter.name })
-                    });
-                } catch(e) {}
+                log.innerHTML += `<div id="typing" class="msg-ai" style="opacity: 0.5;"><i>DM is resolving action...</i></div>`; log.scrollTop = log.scrollHeight;
+                try { await authFetch('/api/chat', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ campaign_id: currentCampaignId, message: msg, character_name: myCharacter.name }) }); } catch(e) {}
             }
         }
     </script>
