@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>AI VTT Engine</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; height: 100vh; margin: 0; background: #121212; color: #e0e0e0; }
+        .panel { padding: 20px; border-right: 1px solid #333; overflow-y: auto; }
+        #left-panel { width: 250px; background: #1e1e1e; }
+        #center-panel { flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #181818; }
+        #right-panel { width: 350px; background: #1e1e1e; display: flex; flex-direction: column; }
+        
+        canvas { background: #2b2b2b; border: 2px solid #555; cursor: grab; box-shadow: 0 4px 8px rgba(0,0,0,0.5); }
+        
+        .char-card { background: #2c2c2c; padding: 10px; margin-bottom: 10px; border-radius: 5px; border-left: 4px solid #3498db; }
+        
+        #chat-log { flex-grow: 1; overflow-y: auto; padding: 10px; background: #000; border-radius: 5px; margin-bottom: 10px; font-size: 14px; line-height: 1.4; }
+        .msg-user { color: #4facfe; margin-bottom: 8px; }
+        .msg-ai { color: #a8e6cf; margin-bottom: 8px; }
+        
+        input[type="text"] { padding: 10px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; width: calc(100% - 22px); margin-bottom: 10px;}
+        button { padding: 10px; background: #4facfe; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #00f2fe; color: black;}
+    </style>
+</head>
+<body>
+
+    <div id="left-panel" class="panel">
+        <h3>Campaign Party</h3>
+        <button onclick="createDummyChar()" style="width: 100%; margin-bottom: 15px;">+ Add Test Character</button>
+        <div id="char-list"></div>
+    </div>
+
+    <div id="center-panel" class="panel">
+        <h2>Battle Map</h2>
+        <canvas id="map" width="600" height="600"></canvas>
+    </div>
+
+    <div id="right-panel" class="panel">
+        <h3>AI Dungeon Master</h3>
+        <div id="chat-log"></div>
+        <input type="text" id="chat-input" placeholder="Roll investigation..." onkeypress="if(event.key === 'Enter') sendChat()">
+        <button onclick="sendChat()">Send Action</button>
+    </div>
+
+    <script>
+        // --- 1. Database/Character Logic ---
+        async function loadCharacters() {
+            const res = await fetch('/api/character');
+            const chars = await res.json();
+            const list = document.getElementById('char-list');
+            list.innerHTML = '';
+            chars.forEach(c => {
+                list.innerHTML += `<div class="char-card"><b>${c.name}</b> (${c.char_class})<br>HP: ${c.hp} | AC: ${c.ac}</div>`;
+            });
+        }
+
+        async function createDummyChar() {
+            await fetch('/api/character', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name: "Thorin", char_class: "Fighter", hp: 45, ac: 16})
+            });
+            loadCharacters();
+        }
+        loadCharacters();
+
+        // --- 2. Map & WebSocket Logic ---
+        const canvas = document.getElementById('map');
+        const ctx = canvas.getContext('2d');
+        const ws = new WebSocket(`ws://${window.location.host}/ws/map`);
+        
+        let tokens = {};
+        let draggingToken = null;
+
+        function drawMap() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // Grid
+            ctx.strokeStyle = '#333';
+            for(let i = 0; i <= 600; i += 50) {
+                ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 600); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(600, i); ctx.stroke();
+            }
+            // Tokens
+            for (const [id, t] of Object.entries(tokens)) {
+                ctx.beginPath();
+                ctx.arc(t.x, t.y, 20, 0, Math.PI * 2);
+                ctx.fillStyle = t.color;
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.fillStyle = '#fff';
+                ctx.textAlign = "center";
+                ctx.fillText(id.charAt(0).toUpperCase(), t.x, t.y + 5);
+            }
+        }
+
+        ws.onmessage = (event) => {
+            const serverTokens = JSON.parse(event.data);
+            // Update local state, but don't snap the token we are currently dragging
+            for (const id in serverTokens) {
+                if (draggingToken !== id) {
+                    tokens[id] = serverTokens[id];
+                }
+            }
+            drawMap();
+        };
+
+        canvas.addEventListener('mousedown', e => {
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+            for (const [id, t] of Object.entries(tokens)) {
+                if (Math.hypot(mx - t.x, my - t.y) < 20) {
+                    draggingToken = id;
+                    break;
+                }
+            }
+        });
+
+        canvas.addEventListener('mousemove', e => {
+            if (draggingToken) {
+                const rect = canvas.getBoundingClientRect();
+                tokens[draggingToken].x = e.clientX - rect.left;
+                tokens[draggingToken].y = e.clientY - rect.top;
+                drawMap();
+                ws.send(JSON.stringify({id: draggingToken, x: tokens[draggingToken].x, y: tokens[draggingToken].y}));
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => draggingToken = null);
+        canvas.addEventListener('mouseleave', () => draggingToken = null);
+
+        // --- 3. AI Chat Logic ---
+        async function sendChat() {
+            const input = document.getElementById('chat-input');
+            const log = document.getElementById('chat-log');
+            const msg = input.value;
+            if(!msg) return;
+
+            log.innerHTML += `<div class="msg-user"><b>Player:</b> ${msg}</div>`;
+            input.value = '';
+            log.innerHTML += `<div id="typing" class="msg-ai"><i>DM is typing...</i></div>`;
+            log.scrollTop = log.scrollHeight;
+
+            const res = await fetch('/api/chat', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({message: msg})
+            });
+            const data = await res.json();
+            
+            document.getElementById('typing').remove();
+            log.innerHTML += `<div class="msg-ai"><b>AI DM:</b> ${data.reply}</div>`;
+            log.scrollTop = log.scrollHeight;
+        }
+    </script>
+</body>
+</html>
