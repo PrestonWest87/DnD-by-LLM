@@ -45,37 +45,41 @@ def startup_event():
                     print("Successfully ingested core_rules.txt into ChromaDB.")
                 except httpx.ConnectError:
                     print("CRITICAL WARNING: Could not connect to Ollama at startup. RAG ingestion failed.")
-        else:
-            print("Warning: core_rules.txt not found.")
 
 class RoomManager:
     def __init__(self):
         self.active_rooms: dict[int, list[WebSocket]] = defaultdict(list)
         self.campaign_states: dict[int, dict] = defaultdict(dict)
+        self.ready_states: dict[int, dict] = defaultdict(dict)
 
     async def connect(self, websocket: WebSocket, campaign_id: int):
         await websocket.accept()
         self.active_rooms[campaign_id].append(websocket)
         current_state = self.campaign_states.get(campaign_id, {})
         await websocket.send_text(json.dumps({"type": "state", "data": current_state}))
+        await websocket.send_text(json.dumps({"type": "ready_update", "states": self.ready_states.get(campaign_id, {})}))
 
     async def disconnect(self, websocket: WebSocket, campaign_id: int):
         if websocket in self.active_rooms[campaign_id]:
             self.active_rooms[campaign_id].remove(websocket)
-            # Notify remaining users to update their party list UI
             await self.broadcast({"type": "system", "action": "reload_party"}, campaign_id)
 
     async def broadcast(self, data: dict, campaign_id: int):
-        # Allow system events through immediately
         if data.get("type") in ["chat", "system"]:
             for connection in self.active_rooms[campaign_id]:
                 await connection.send_text(json.dumps(data))
             return
 
+        if data.get("type") == "ready_toggle":
+            char_name = data.get("character_name")
+            is_ready = data.get("is_ready")
+            self.ready_states[campaign_id][char_name] = is_ready
+            for connection in self.active_rooms[campaign_id]:
+                await connection.send_text(json.dumps({"type": "ready_update", "states": self.ready_states[campaign_id]}))
+            return
+
         if data.get("type") == "move":
             token_id = data.get("id")
-            if campaign_id not in self.campaign_states:
-                 self.campaign_states[campaign_id] = {}
             if token_id not in self.campaign_states[campaign_id]:
                  self.campaign_states[campaign_id][token_id] = {"x": 0, "y": 0, "color": "#fff"}
             self.campaign_states[campaign_id][token_id]["x"] = data["x"]
@@ -162,11 +166,11 @@ async def generate_campaign_outline(campaign_id: int, current_user: User = Depen
     characters = db.query(Character).filter(Character.campaign_id == campaign_id).all()
     
     party_desc = "\n".join([f"- {c.name} ({c.stats.get('char_class', 'Unknown')}): {c.backstory}" for c in characters])
-    prompt = f"""You are an expert Dungeon Master creating a new D&D campaign named '{campaign.name}'.
+    prompt = f"""You are an expert Dungeon Master creating a new D&D 5e campaign named '{campaign.name}'.
     The party consists of:
     {party_desc}
     
-    Write a concise, 3-act story outline with 3 planned combat encounters. Do not reveal this to the players. This is your DM notes."""
+    Write a concise, 3-act story outline with 3 planned combat encounters. Do not reveal this to the players. This is your secret DM notes."""
     
     async with httpx.AsyncClient() as client:
         try:
@@ -187,7 +191,6 @@ async def generate_campaign_outline(campaign_id: int, current_user: User = Depen
 @app.post("/api/upload-rules")
 async def upload_rules(file: UploadFile = File(...), current_user: User = Depends(get_current_user)):
     content = await file.read()
-    
     try:
         if file.filename.endswith('.pdf'):
             import PyPDF2
@@ -212,11 +215,46 @@ async def upload_rules(file: UploadFile = File(...), current_user: User = Depend
 
 @app.post("/api/character")
 def create_character(char: CharCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # FIX: Prevent duplicates by updating if it exists
+    existing = db.query(Character).filter(Character.campaign_id == char.campaign_id, Character.owner_id == current_user.id).first()
+    if existing:
+        existing.name = char.name
+        existing.stats = char.stats
+        existing.backstory = char.backstory
+        db.commit()
+        db.refresh(existing)
+        return existing
+
     db_char = Character(name=char.name, owner_id=current_user.id, campaign_id=char.campaign_id, stats=char.stats, backstory=char.backstory)
     db.add(db_char)
     db.commit()
     db.refresh(db_char)
     return db_char
+
+@app.get("/api/campaigns/{campaign_id}/my-character")
+def get_my_character(campaign_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if campaign and campaign.dm_id == current_user.id:
+        return {"name": "DM", "role": "DM"}
+
+    char = db.query(Character).filter(Character.campaign_id == campaign_id, Character.owner_id == current_user.id).first()
+    if not char:
+        raise HTTPException(status_code=404, detail="Character not found")
+    return char
+
+@app.get("/api/campaigns/{campaign_id}/characters")
+def get_campaign_characters(campaign_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return db.query(Character).filter(Character.campaign_id == campaign_id).all()
+
+# NEW: Fetch Chat History for Persistent Sessions
+@app.get("/api/campaigns/{campaign_id}/chat-history")
+def get_chat_history(campaign_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    history = db.query(ChatMessage).filter(ChatMessage.campaign_id == campaign_id).order_by(ChatMessage.id.asc()).all()
+    formatted = []
+    for msg in history:
+        role = "ai" if msg.sender_type == "ai_dm" else ("user" if msg.sender_type == "player" else "party")
+        formatted.append({"sender": msg.sender_name, "message": msg.content, "role": role})
+    return formatted
 
 @app.websocket("/ws/map/{campaign_id}")
 async def map_socket(websocket: WebSocket, campaign_id: int, token: str, db: Session = Depends(get_db)):
@@ -226,7 +264,6 @@ async def map_socket(websocket: WebSocket, campaign_id: int, token: str, db: Ses
         return
         
     await room_manager.connect(websocket, campaign_id)
-    # Broadcast to tell all connected clients that a new player arrived
     await room_manager.broadcast({"type": "system", "action": "reload_party"}, campaign_id)
     
     try:
@@ -235,25 +272,6 @@ async def map_socket(websocket: WebSocket, campaign_id: int, token: str, db: Ses
             await room_manager.broadcast(json.loads(data), campaign_id)
     except WebSocketDisconnect:
         await room_manager.disconnect(websocket, campaign_id)
-
-@app.get("/api/campaigns/{campaign_id}/characters")
-def get_campaign_characters(campaign_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return db.query(Character).filter(Character.campaign_id == campaign_id).all()
-
-@app.websocket("/ws/map/{campaign_id}")
-async def map_socket(websocket: WebSocket, campaign_id: int, token: str, db: Session = Depends(get_db)):
-    user = verify_ws_token(token, db)
-    if not user:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        return
-        
-    await room_manager.connect(websocket, campaign_id)
-    try:
-        while True:
-            data = await websocket.receive_text()
-            await room_manager.broadcast(json.loads(data), campaign_id)
-    except WebSocketDisconnect:
-        room_manager.disconnect(websocket, campaign_id)
 
 @app.post("/api/chat")
 async def chat(request: ChatRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -267,15 +285,21 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
     relevant_rules = retrieve_relevant_rules(request.message)
 
     campaign = db.query(Campaign).filter(Campaign.id == request.campaign_id).first()
-    outline = campaign.story_outline if campaign.story_outline else "No outline set."
+    outline = campaign.story_outline if campaign.story_outline else "No outline set. Generate a creative starting scenario."
 
-    system_prompt = f"""You are the Dungeon Master. 
-    Campaign Outline (Keep secret, use to guide events): {outline}
-    Rules Context: {relevant_rules}
-    Player Sheet: Name: {request.character_name}, {stats_str}, Background: {backstory}
-    Keep response to 2-4 sentences. Describe the outcome taking their specific character stats and modifiers into account."""
+    # FIX: Highly tuned D&D 5e strict DM prompt
+    system_prompt = f"""You are an expert Dungeon Master running a strictly Rules-As-Written Dungeons & Dragons 5e campaign.
+    Campaign Secret Outline: {outline}
+    D&D 5e Rulebook Context: {relevant_rules}
+    Current Player: {request.character_name}, Stats: {stats_str}, Background: {backstory}
+    
+    DIRECTIVES:
+    1. ACT ENTIRELY AS THE DUNGEON MASTER. Never break character.
+    2. Narrate the environment and the results of player actions.
+    3. Require the player to make specific 1d20 rolls (e.g., 'Make a DC 15 Dexterity saving throw' or 'Roll a Perception check') when the outcome of an action is uncertain.
+    4. Keep responses immersive but concise (2-4 sentences max)."""
 
-    history = db.query(ChatMessage).filter(ChatMessage.campaign_id == request.campaign_id).order_by(ChatMessage.id.desc()).limit(10).all()
+    history = db.query(ChatMessage).filter(ChatMessage.campaign_id == request.campaign_id).order_by(ChatMessage.id.desc()).limit(15).all()
     history.reverse()
     
     messages = [{"role": "system", "content": system_prompt}]
@@ -286,9 +310,9 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
         try:
             response = await client.post(f"{OLLAMA_URL}/api/chat", json={"model": MODEL_NAME, "messages": messages, "stream": False}, timeout=60.0)
             response.raise_for_status()
-            ai_text = response.json().get("message", {}).get("content", "DM is silent.")
+            ai_text = response.json().get("message", {}).get("content", "The DM ponders in silence.")
         except Exception as e:
-            ai_text = f"System Error: {str(e)}"
+            ai_text = f"System Error: The fabric of reality stutters. ({str(e)})"
 
     db.add(ChatMessage(campaign_id=request.campaign_id, sender_type="ai_dm", sender_name="DM", content=ai_text))
     db.commit()
