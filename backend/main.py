@@ -170,6 +170,21 @@ async def map_socket(websocket: WebSocket, campaign_id: int, token: str, db: Ses
     except WebSocketDisconnect:
         room_manager.disconnect(websocket, campaign_id)
 
+# Add this near your app = FastAPI() declaration in backend/main.py
+@app.on_event("startup")
+def startup_event():
+    from backend.rag import ingest_rulebook, rules_collection
+    import os
+    
+    # Only ingest if the collection is empty to avoid redundant processing
+    if rules_collection.count() == 0:
+        if os.path.exists("core_rules.txt"):
+            with open("core_rules.txt", "r", encoding="utf-8") as f:
+                ingest_rulebook(f.read())
+            print("Successfully ingested core_rules.txt into ChromaDB.")
+        else:
+            print("Warning: core_rules.txt not found.")
+
 @app.post("/api/chat")
 async def chat(request: ChatRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     await room_manager.broadcast({"type": "chat", "sender": request.character_name, "message": request.message, "role": "user"}, request.campaign_id)
