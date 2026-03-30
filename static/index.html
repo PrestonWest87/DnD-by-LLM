@@ -5,83 +5,237 @@
     <title>AI VTT Engine</title>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; height: 100vh; margin: 0; background: #121212; color: #e0e0e0; }
+        
+        /* --- Screen Overlays --- */
+        .screen { display: none; width: 100%; height: 100%; align-items: center; justify-content: center; flex-direction: column; }
+        .active-screen { display: flex; }
+        .menu-box { background: #1e1e1e; padding: 30px; border-radius: 8px; border: 1px solid #333; width: 300px; text-align: center;}
+        .menu-box input { width: 90%; margin-bottom: 10px; }
+        .menu-box button { width: 95%; margin-bottom: 10px; }
+        
+        /* --- VTT Layout --- */
+        #vtt-screen { display: none; width: 100%; height: 100%; flex-direction: row; }
         .panel { padding: 20px; border-right: 1px solid #333; overflow-y: auto; }
         #left-panel { width: 250px; background: #1e1e1e; }
         #center-panel { flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #181818; }
         #right-panel { width: 350px; background: #1e1e1e; display: flex; flex-direction: column; }
         
         canvas { background: #2b2b2b; border: 2px solid #555; cursor: grab; box-shadow: 0 4px 8px rgba(0,0,0,0.5); }
-        
         .char-card { background: #2c2c2c; padding: 10px; margin-bottom: 10px; border-radius: 5px; border-left: 4px solid #3498db; }
         
         #chat-log { flex-grow: 1; overflow-y: auto; padding: 10px; background: #000; border-radius: 5px; margin-bottom: 10px; font-size: 14px; line-height: 1.4; }
         .msg-user { color: #4facfe; margin-bottom: 8px; }
         .msg-ai { color: #a8e6cf; margin-bottom: 8px; }
         
-        input[type="text"] { padding: 10px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; width: calc(100% - 22px); margin-bottom: 10px;}
+        input[type="text"], input[type="password"] { padding: 10px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; box-sizing: border-box;}
         button { padding: 10px; background: #4facfe; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
         button:hover { background: #00f2fe; color: black;}
     </style>
 </head>
 <body>
 
-    <div id="left-panel" class="panel">
-        <h3>Campaign Party</h3>
-        <button onclick="createDummyChar()" style="width: 100%; margin-bottom: 15px;">+ Add Test Character</button>
-        <div id="char-list"></div>
+    <div id="auth-screen" class="screen active-screen">
+        <div class="menu-box">
+            <h2>Welcome to the VTT</h2>
+            <input type="text" id="auth-user" placeholder="Username">
+            <input type="password" id="auth-pass" placeholder="Password">
+            <button onclick="login()">Login</button>
+            <button onclick="register()" style="background: #2c3e50;">Register</button>
+            <div id="auth-msg" style="color: #e74c3c; margin-top: 10px; font-size: 14px;"></div>
+        </div>
     </div>
 
-    <div id="center-panel" class="panel">
-        <h2>Battle Map</h2>
-        <canvas id="map" width="600" height="600"></canvas>
+    <div id="lobby-screen" class="screen">
+        <div class="menu-box">
+            <h2>Campaign Lobby</h2>
+            <hr style="border-color: #333; margin-bottom: 15px;">
+            <input type="text" id="new-camp-name" placeholder="New Campaign Name">
+            <button onclick="createCampaign()">Create Campaign</button>
+            <hr style="border-color: #333; margin: 15px 0;">
+            <input type="text" id="join-camp-code" placeholder="Invite Code (e.g., a1b2c3d4)">
+            <button onclick="joinCampaign()" style="background: #27ae60;">Join Campaign</button>
+            <div id="lobby-msg" style="color: #f1c40f; margin-top: 10px; font-size: 14px;"></div>
+        </div>
     </div>
 
-    <div id="right-panel" class="panel">
-        <h3>AI Dungeon Master</h3>
-        <div id="chat-log"></div>
-        <input type="text" id="chat-input" placeholder="Roll investigation..." onkeypress="if(event.key === 'Enter') sendChat()">
-        <button onclick="sendChat()">Send Action</button>
+    <div id="vtt-screen">
+        <div id="left-panel" class="panel">
+            <h3>Campaign Party</h3>
+            <button onclick="createDummyChar()" style="width: 100%; margin-bottom: 15px;">+ Add Test Character</button>
+            <div id="char-list"></div>
+        </div>
+
+        <div id="center-panel" class="panel">
+            <h2 id="map-title">Battle Map</h2>
+            <canvas id="map" width="600" height="600"></canvas>
+        </div>
+
+        <div id="right-panel" class="panel">
+            <h3>AI Dungeon Master</h3>
+            <div id="chat-log"></div>
+            <div style="display: flex; gap: 5px;">
+                <input type="text" id="chat-input" placeholder="Roll investigation..." onkeypress="if(event.key === 'Enter') sendChat()" style="width: 100%; margin-bottom: 0;">
+                <button onclick="sendChat()">Send</button>
+            </div>
+        </div>
     </div>
 
     <script>
-        // --- 1. Database/Character Logic ---
+        // --- Global State ---
+        let currentCampaignId = null;
+        let ws = null;
+
+        // --- Helper: Authenticated Fetch ---
+        async function authFetch(url, options = {}) {
+            const token = localStorage.getItem('vtt_token');
+            if (!options.headers) options.headers = {};
+            options.headers['Authorization'] = `Bearer ${token}`;
+            return fetch(url, options);
+        }
+
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen, #vtt-screen').forEach(el => el.classList.remove('active-screen'));
+            document.getElementById(screenId).style.display = (screenId === 'vtt-screen') ? 'flex' : 'flex';
+        }
+
+        // --- 1. Auth Logic ---
+        async function register() {
+            const u = document.getElementById('auth-user').value;
+            const p = document.getElementById('auth-pass').value;
+            const res = await fetch('/api/auth/register', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: u, password: p})
+            });
+            if (res.ok) {
+                document.getElementById('auth-msg').innerText = "Registered! Now login.";
+                document.getElementById('auth-msg').style.color = "#2ecc71";
+            } else {
+                const data = await res.json();
+                document.getElementById('auth-msg').innerText = data.detail || "Error registering";
+            }
+        }
+
+        async function login() {
+            const u = document.getElementById('auth-user').value;
+            const p = document.getElementById('auth-pass').value;
+            
+            // OAuth2 expects form-encoded data, not JSON
+            const formData = new URLSearchParams();
+            formData.append('username', u);
+            formData.append('password', p);
+
+            const res = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: formData
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                localStorage.setItem('vtt_token', data.access_token);
+                showScreen('lobby-screen');
+            } else {
+                document.getElementById('auth-msg').innerText = "Invalid credentials";
+            }
+        }
+
+        // Auto-check auth on load
+        if (localStorage.getItem('vtt_token')) {
+            showScreen('lobby-screen');
+        }
+
+        // --- 2. Campaign Lobby Logic ---
+        async function createCampaign() {
+            const name = document.getElementById('new-camp-name').value;
+            if(!name) return;
+            const res = await authFetch('/api/campaigns', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name: name})
+            });
+            const data = await res.json();
+            document.getElementById('lobby-msg').innerText = `Created! Invite Code: ${data.invite_code}`;
+            enterCampaign(data.id, name);
+        }
+
+        async function joinCampaign() {
+            const code = document.getElementById('join-camp-code').value;
+            if(!code) return;
+            const res = await authFetch(`/api/campaigns/join/${code}`, { method: 'POST' });
+            if (res.ok) {
+                const data = await res.json();
+                enterCampaign(data.campaign_id, "Joined Campaign");
+            } else {
+                document.getElementById('lobby-msg').innerText = "Invalid invite code.";
+            }
+        }
+
+        function enterCampaign(id, name) {
+            currentCampaignId = id;
+            document.getElementById('map-title').innerText = `Campaign: ${name}`;
+            showScreen('vtt-screen');
+            initWebSocket();
+            loadCharacters();
+        }
+
+        // --- 3. VTT Data & Map Logic ---
         async function loadCharacters() {
-            const res = await fetch('/api/character');
+            // In a production app, you'd filter by currentCampaignId on the backend
+            const res = await authFetch('/api/character');
+            if (!res.ok) return;
             const chars = await res.json();
             const list = document.getElementById('char-list');
             list.innerHTML = '';
             chars.forEach(c => {
-                list.innerHTML += `<div class="char-card"><b>${c.name}</b> (${c.char_class})<br>HP: ${c.hp} | AC: ${c.ac}</div>`;
+                // Handle parsing the new JSON stats column safely
+                const stats = typeof c.stats === 'string' ? JSON.parse(c.stats) : (c.stats || {});
+                list.innerHTML += `<div class="char-card"><b>${c.name}</b> (${stats.char_class || 'Unknown'})<br>HP: ${stats.hp || 0} | AC: ${stats.ac || 0}</div>`;
             });
         }
 
         async function createDummyChar() {
-            await fetch('/api/character', {
+            await authFetch('/api/character', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({name: "Thorin", char_class: "Fighter", hp: 45, ac: 16})
+                body: JSON.stringify({
+                    name: "Thorin", 
+                    campaign_id: currentCampaignId,
+                    stats: {char_class: "Fighter", hp: 45, ac: 16},
+                    backstory: "A grumpy dwarf from the high mountains."
+                })
             });
             loadCharacters();
         }
-        loadCharacters();
 
-        // --- 2. Map & WebSocket Logic ---
+        // --- Map & WebSocket Handling ---
         const canvas = document.getElementById('map');
         const ctx = canvas.getContext('2d');
-        const ws = new WebSocket(`ws://${window.location.host}/ws/map`);
-        
         let tokens = {};
         let draggingToken = null;
 
+        function initWebSocket() {
+            if (ws) ws.close();
+            const token = localStorage.getItem('vtt_token');
+            // Connect to the specific campaign room, passing the auth token in the URL
+            ws = new WebSocket(`ws://${window.location.host}/ws/map/${currentCampaignId}?token=${token}`);
+            
+            ws.onmessage = (event) => {
+                const serverTokens = JSON.parse(event.data);
+                for (const id in serverTokens) {
+                    if (draggingToken !== id) tokens[id] = serverTokens[id];
+                }
+                drawMap();
+            };
+        }
+
         function drawMap() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            // Grid
             ctx.strokeStyle = '#333';
             for(let i = 0; i <= 600; i += 50) {
                 ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 600); ctx.stroke();
                 ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(600, i); ctx.stroke();
             }
-            // Tokens
             for (const [id, t] of Object.entries(tokens)) {
                 ctx.beginPath();
                 ctx.arc(t.x, t.y, 20, 0, Math.PI * 2);
@@ -95,17 +249,6 @@
                 ctx.fillText(id.charAt(0).toUpperCase(), t.x, t.y + 5);
             }
         }
-
-        ws.onmessage = (event) => {
-            const serverTokens = JSON.parse(event.data);
-            // Update local state, but don't snap the token we are currently dragging
-            for (const id in serverTokens) {
-                if (draggingToken !== id) {
-                    tokens[id] = serverTokens[id];
-                }
-            }
-            drawMap();
-        };
 
         canvas.addEventListener('mousedown', e => {
             const rect = canvas.getBoundingClientRect();
@@ -125,14 +268,16 @@
                 tokens[draggingToken].x = e.clientX - rect.left;
                 tokens[draggingToken].y = e.clientY - rect.top;
                 drawMap();
-                ws.send(JSON.stringify({id: draggingToken, x: tokens[draggingToken].x, y: tokens[draggingToken].y}));
+                if(ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({id: draggingToken, x: tokens[draggingToken].x, y: tokens[draggingToken].y}));
+                }
             }
         });
 
         canvas.addEventListener('mouseup', () => draggingToken = null);
         canvas.addEventListener('mouseleave', () => draggingToken = null);
 
-        // --- 3. AI Chat Logic ---
+        // --- AI Chat Logic ---
         async function sendChat() {
             const input = document.getElementById('chat-input');
             const log = document.getElementById('chat-log');
@@ -141,17 +286,19 @@
 
             log.innerHTML += `<div class="msg-user"><b>Player:</b> ${msg}</div>`;
             input.value = '';
-            log.innerHTML += `<div id="typing" class="msg-ai"><i>DM is typing...</i></div>`;
+            log.innerHTML += `<div id="typing" class="msg-ai"><i>DM is consulting the rules...</i></div>`;
             log.scrollTop = log.scrollHeight;
 
-            const res = await fetch('/api/chat', {
+            const res = await authFetch('/api/chat', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({message: msg})
+                body: JSON.stringify({message: msg}) // You will eventually want to pass campaign_id here too
             });
             const data = await res.json();
             
-            document.getElementById('typing').remove();
+            const typingEl = document.getElementById('typing');
+            if (typingEl) typingEl.remove();
+            
             log.innerHTML += `<div class="msg-ai"><b>AI DM:</b> ${data.reply}</div>`;
             log.scrollTop = log.scrollHeight;
         }
