@@ -218,16 +218,23 @@ def create_character(char: CharCreate, current_user: User = Depends(get_current_
     db.refresh(db_char)
     return db_char
 
-@app.get("/api/campaigns/{campaign_id}/my-character")
-def get_my_character(campaign_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
-    if campaign and campaign.dm_id == current_user.id:
-        return {"name": "DM", "role": "DM"}
-
-    char = db.query(Character).filter(Character.campaign_id == campaign_id, Character.owner_id == current_user.id).first()
-    if not char:
-        raise HTTPException(status_code=404, detail="Character not found")
-    return char
+@app.websocket("/ws/map/{campaign_id}")
+async def map_socket(websocket: WebSocket, campaign_id: int, token: str, db: Session = Depends(get_db)):
+    user = verify_ws_token(token, db)
+    if not user:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+        
+    await room_manager.connect(websocket, campaign_id)
+    # Broadcast to tell all connected clients that a new player arrived
+    await room_manager.broadcast({"type": "system", "action": "reload_party"}, campaign_id)
+    
+    try:
+        while True:
+            data = await websocket.receive_text()
+            await room_manager.broadcast(json.loads(data), campaign_id)
+    except WebSocketDisconnect:
+        await room_manager.disconnect(websocket, campaign_id)
 
 @app.get("/api/campaigns/{campaign_id}/characters")
 def get_campaign_characters(campaign_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
