@@ -157,9 +157,7 @@
             <div id="chat-log"></div>
             <div style="display: flex; flex-direction: column; gap: 5px;">
                 <select id="chat-type" style="padding: 10px; background: #222; color: white; border: 1px solid #555; border-radius: 4px;">
-                    <option value="action">🎲 Take Action (Triggers AI DM)</option>
-                    <option value="party">💬 Talk to Party (Chat Only)</option>
-                </select>
+                    </select>
                 <div style="display: flex; gap: 5px;">
                     <input type="text" id="chat-input" placeholder="Enter message..." onkeypress="if(event.key === 'Enter') sendChat()" style="margin:0; flex-grow:1;">
                     <button onclick="sendChat()" style="margin:0; width:80px;">Send</button>
@@ -257,14 +255,18 @@
                         list.innerHTML = '<div style="color:#aaa; font-style:italic;">No campaigns yet. Create or join one!</div>';
                     }
                     campaigns.forEach(c => {
-                        const codeDisp = c.role === 'DM' ? ` <span style="font-size:10px; color:#aaa;">(Code: ${c.invite_code})</span>` : '';
+                        // FIX: Show invite code for all users so they can invite friends to AI games
+                        const codeDisp = ` <span style="font-size:10px; color:#aaa;">(Code: ${c.invite_code})</span>`;
+                        // FIX: Escape characters safely to prevent breaking the HTML button tag
+                        const safeName = c.name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                        
                         list.innerHTML += `
                             <div class="camp-list-item">
                                 <div>
                                     <b>${c.name}</b>${codeDisp}<br>
                                     <span class="camp-badge">${c.role}</span>
                                 </div>
-                                <button onclick="enterCampaign(${c.id}, '${c.name}')" style="width: 80px; margin: 0; background: #2ecc71;">Launch</button>
+                                <button onclick="enterCampaign(${c.id}, '${safeName}')" style="width: 80px; margin: 0; background: #2ecc71;">Launch</button>
                             </div>
                         `;
                     });
@@ -405,11 +407,19 @@
         function launchVTT() {
             document.getElementById('map-title').innerText = `Campaign: ${currentCampaignName}`;
             
-            if (myCharacter.role === 'DM') {
+            const chatTypeSelect = document.getElementById('chat-type');
+
+            // FIX: Safely route the UI and dropdown options based on character role
+            if (myCharacter && myCharacter.role === 'DM') {
                 document.getElementById('party-header').innerText = "DM Control Panel";
-                document.getElementById('chat-type').innerHTML = `<option value="party">💬 Speak as DM</option>`;
+                chatTypeSelect.innerHTML = `<option value="party">💬 Speak as DM</option>`;
                 document.getElementById('dm-controls').style.display = 'block';
             } else {
+                document.getElementById('party-header').innerText = "Campaign Party";
+                chatTypeSelect.innerHTML = `
+                    <option value="action">🎲 Take Action (Triggers AI DM)</option>
+                    <option value="party">💬 Talk to Party (Chat Only)</option>
+                `;
                 document.getElementById('dm-controls').style.display = 'none';
             }
 
