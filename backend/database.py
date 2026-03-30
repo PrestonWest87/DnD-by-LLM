@@ -14,7 +14,6 @@ class User(Base):
     hashed_password = Column(String)
     
     characters = relationship("Character", back_populates="owner")
-    # A user can be a DM for multiple campaigns
     dm_campaigns = relationship("Campaign", back_populates="dm") 
 
 class Campaign(Base):
@@ -22,7 +21,10 @@ class Campaign(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String)
     invite_code = Column(String, unique=True, index=True, default=lambda: secrets.token_hex(4))
-    dm_id = Column(Integer, ForeignKey("users.id"))
+    dm_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    
+    # Store the AI's secret campaign outline
+    story_outline = Column(Text, nullable=True) 
     
     dm = relationship("User", back_populates="dm_campaigns")
     characters = relationship("Character", back_populates="campaign")
@@ -35,7 +37,6 @@ class Character(Base):
     owner_id = Column(Integer, ForeignKey("users.id"))
     campaign_id = Column(Integer, ForeignKey("campaigns.id"))
     
-    # Storing stats as JSON allows flexibility for different TTRPG rule systems
     stats = Column(JSON) 
     backstory = Column(Text)
     
@@ -46,7 +47,7 @@ class ChatMessage(Base):
     __tablename__ = "chat_messages"
     id = Column(Integer, primary_key=True, index=True)
     campaign_id = Column(Integer, ForeignKey("campaigns.id"))
-    sender_type = Column(String) # 'player', 'system', 'ai_dm'
+    sender_type = Column(String) 
     sender_name = Column(String)
     content = Column(Text)
     
