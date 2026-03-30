@@ -17,11 +17,9 @@
         button { width: 100%; padding: 10px; background: #4facfe; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-bottom: 10px;}
         button:hover { background: #00f2fe; color: black;}
 
-        /* Dashboard Styles */
         .camp-list-item { background: #2c2c2c; padding: 10px; margin-bottom: 10px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; border-left: 4px solid #4facfe;}
         .camp-badge { background: #111; padding: 3px 8px; border-radius: 10px; font-size: 11px; color: #ccc;}
 
-        /* Character Rule Engine UI */
         .sheet-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; text-align: left; margin-bottom: 15px;}
         .attr-row { display: flex; justify-content: space-between; align-items: center; background: #222; padding: 8px; margin-bottom: 5px; border-radius: 4px; border: 1px solid #444;}
         .attr-label { width: 40px; font-weight: bold; color: #aaa;}
@@ -34,7 +32,6 @@
         .d-val { font-size: 24px; font-weight: bold; color: #fff;}
         .d-lbl { font-size: 11px; color: #888; text-transform: uppercase;}
 
-        /* VTT Layout */
         #vtt-screen { display: none; width: 100%; height: 100%; flex-direction: row; }
         .panel { padding: 20px; border-right: 1px solid #333; overflow-y: auto; }
         #left-panel { width: 280px; background: #1e1e1e; }
@@ -70,16 +67,21 @@
         <div class="menu-box small-box">
             <h2>Your Campaigns</h2>
             <div id="dashboard-list" style="text-align: left; margin-bottom: 20px; max-height: 200px; overflow-y: auto;">
-                </div>
+            </div>
 
             <hr style="border-color: #333; margin-bottom: 15px;">
             <input type="text" id="new-camp-name" placeholder="New Campaign Name">
             <select id="new-camp-dm" style="margin-bottom: 10px;">
-                <option value="ai">🤖 AI Dungeon Master (I will play a character)</option>
+                <option value="ai">🤖 AI Dungeon Master</option>
                 <option value="human">🧙‍♂️ I will be the Dungeon Master</option>
             </select>
             <button onclick="createCampaign()">Create Campaign</button>
+            
             <hr style="border-color: #333; margin: 15px 0;">
+            <h3 style="margin-top:0;">Join an Existing Game</h3>
+            <input type="text" id="join-camp-code" placeholder="Enter Invite Code (e.g. a1b2c3d4)">
+            <button onclick="joinCampaign()" style="background: #e67e22;">Join Campaign</button>
+            <div id="lobby-msg" style="color: #e74c3c; margin-top: 10px; font-size: 14px;"></div>
         </div>
     </div>
 
@@ -130,6 +132,11 @@
         <div id="left-panel" class="panel">
             <button onclick="loadDashboard()" style="background: #444; font-size: 12px; margin-bottom: 15px; padding: 6px;">⬅ Back to Campaigns</button>
             
+            <div id="dm-controls" style="display: none; background: #2c0e0e; padding: 10px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #e74c3c;">
+                <h4 style="margin:0 0 10px 0; color: #e74c3c;">DM Actions</h4>
+                <button onclick="generateStoryOutline()" style="background: #e74c3c; padding: 5px; font-size: 12px;">Generate AI Story Outline</button>
+            </div>
+
             <h3 id="party-header" style="margin-top: 0;">Campaign Party</h3>
             <div id="char-list"></div>
         </div>
@@ -142,7 +149,7 @@
             <div id="chat-log"></div>
             <div style="display: flex; flex-direction: column; gap: 5px;">
                 <select id="chat-type" style="padding: 10px; background: #222; color: white; border: 1px solid #555; border-radius: 4px;">
-                    <option value="action">🎲 Take Action (Triggers DM)</option>
+                    <option value="action">🎲 Take Action (Triggers AI DM)</option>
                     <option value="party">💬 Talk to Party (Chat Only)</option>
                 </select>
                 <div style="display: flex; gap: 5px;">
@@ -154,12 +161,11 @@
     </div>
 
     <script>
-        // --- Global State ---
         let currentCampaignId = null;
         let currentCampaignName = "";
         let myCharacter = null;
         let ws = null;
-        let finalStats = {}; // Holds calculated D&D rules engine stats
+        let finalStats = {}; 
 
         async function authFetch(url, options = {}) {
             const token = localStorage.getItem('vtt_token');
@@ -168,12 +174,21 @@
             return fetch(url, options);
         }
 
+        // Fixed screen routing logic
         function showScreen(screenId) {
-            document.querySelectorAll('.screen, #vtt-screen').forEach(el => el.classList.remove('active-screen'));
-            document.getElementById(screenId).style.display = (screenId === 'vtt-screen') ? 'flex' : 'flex';
+            document.querySelectorAll('.screen, #vtt-screen').forEach(el => {
+                el.classList.remove('active-screen');
+                el.style.display = ''; 
+            });
+            document.getElementById('vtt-screen').style.display = 'none';
+
+            if (screenId === 'vtt-screen') {
+                document.getElementById('vtt-screen').style.display = 'flex';
+            } else {
+                document.getElementById(screenId).classList.add('active-screen');
+            }
         }
 
-        // --- Auth Logic ---
         async function register() {
             const res = await fetch('/api/auth/register', {
                 method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -204,7 +219,6 @@
 
         if (localStorage.getItem('vtt_token')) loadDashboard();
 
-        // --- Dashboard Logic ---
         async function loadDashboard() {
             showScreen('lobby-screen');
             const res = await authFetch('/api/campaigns/my');
@@ -232,7 +246,6 @@
 
         async function createCampaign() {
             const name = document.getElementById('new-camp-name').value;
-            // NEW: Check the dropdown value
             const isAiDm = document.getElementById('new-camp-dm').value === 'ai';
             if(!name) return;
             
@@ -242,8 +255,6 @@
                 body: JSON.stringify({name: name, ai_dm: isAiDm})
             });
             const data = await res.json();
-            
-            // Enter immediately so they don't orphan the campaign
             enterCampaign(data.id, data.name);
         }
 
@@ -259,11 +270,8 @@
             }
         }
 
-        // --- D&D Rules Engine: Character Generation ---
         const attributes = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
         const standardArray = [15, 14, 13, 12, 10, 8];
-        
-        // Build the Attribute Selectors
         const attrContainer = document.getElementById('attr-container');
         attributes.forEach(attr => {
             let options = standardArray.map(val => `<option value="${val}">${val}</option>`).join('');
@@ -305,8 +313,7 @@
                 if (attr === 'DEX') dexMod = mod;
             });
 
-            // Calculate Base HP
-            let baseHp = 10; // Default Fighter
+            let baseHp = 10; 
             if (charClass === 'Rogue') baseHp = 8;
             if (charClass === 'Wizard') baseHp = 6;
             
@@ -322,8 +329,6 @@
             finalStats.hp = maxHp;
             finalStats.ac = ac;
         }
-
-        // Initialize math on load
         calcStats();
 
         async function enterCampaign(id, name) {
@@ -334,7 +339,7 @@
                 launchVTT();
             } else {
                 showScreen('char-screen');
-                calcStats(); // Refresh sheet
+                calcStats(); 
             }
         }
 
@@ -345,30 +350,40 @@
                 stats: finalStats,
                 backstory: document.getElementById('char-backstory').value || "A generic adventurer."
             };
-
             const res = await authFetch('/api/character', {
                 method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
             });
-
             if (res.ok) {
                 myCharacter = await res.json();
                 launchVTT();
             }
         }
 
-        // --- VTT & WebSockets ---
         function launchVTT() {
             document.getElementById('map-title').innerText = `Campaign: ${currentCampaignName}`;
             
-            // If the user is the DM, change the header to reflect god-mode
             if (myCharacter.role === 'DM') {
                 document.getElementById('party-header').innerText = "DM Control Panel";
                 document.getElementById('chat-type').innerHTML = `<option value="party">💬 Speak as DM</option>`;
+                document.getElementById('dm-controls').style.display = 'block';
+            } else {
+                document.getElementById('dm-controls').style.display = 'none';
             }
 
             showScreen('vtt-screen');
             initWebSocket();
             loadParty();
+        }
+
+        async function generateStoryOutline() {
+            const btn = document.querySelector('#dm-controls button');
+            btn.innerText = "Generating...";
+            btn.disabled = true;
+            
+            await authFetch(`/api/campaigns/${currentCampaignId}/generate-outline`, { method: 'POST' });
+            
+            btn.innerText = "Outline Generated!";
+            setTimeout(() => { btn.innerText = "Generate AI Story Outline"; btn.disabled = false; }, 3000);
         }
 
         async function loadParty() {
@@ -450,26 +465,17 @@
 
         canvas.addEventListener('mousedown', e => {
             const rect = canvas.getBoundingClientRect();
-            const mx = e.clientX - rect.left; 
-            const my = e.clientY - rect.top;
+            const mx = e.clientX - rect.left; const my = e.clientY - rect.top;
             
-            // Check if clicking an existing token
             for (const [id, t] of Object.entries(tokens)) {
-                if (Math.hypot(mx - t.x, my - t.y) < 20) { 
-                    // Optional: Add authorization here so players can only drag their own tokens
-                    draggingToken = id; 
-                    return; 
-                }
+                if (Math.hypot(mx - t.x, my - t.y) < 20) { draggingToken = id; return; }
             }
             
-            // If clicking empty space, spawn a token
             if (myCharacter.role === 'DM') {
-                // DMs can spawn numbered NPC tokens
                 const enemyCount = Object.keys(tokens).filter(k => k.startsWith("NPC")).length + 1;
                 draggingToken = `NPC-${enemyCount}`;
                 tokens[draggingToken] = {x: mx, y: my, color: "#e74c3c"};
             } else {
-                // Players spawn their own token
                 draggingToken = myCharacter.name;
                 tokens[draggingToken] = {x: mx, y: my, color: "#3498db"};
             }
@@ -488,7 +494,6 @@
         canvas.addEventListener('mouseup', () => draggingToken = null);
         canvas.addEventListener('mouseleave', () => draggingToken = null);
 
-        // --- Chat Routing ---
         async function sendChat() {
             const input = document.getElementById('chat-input');
             const type = document.getElementById('chat-type').value;
@@ -496,7 +501,6 @@
             if(!msg) return;
             input.value = '';
 
-            // NEW: If the Human DM sends a message, format it distinctively
             if (myCharacter.role === 'DM') {
                 ws.send(JSON.stringify({ type: "chat", sender: "Human DM", message: msg, role: "ai" }));
             } 
