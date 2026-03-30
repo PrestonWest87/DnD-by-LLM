@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
@@ -14,89 +14,76 @@ from backend.rag import retrieve_relevant_rules
 
 app = FastAPI()
 
-# Mount the static directory for the frontend
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 MODEL_NAME = "phi4-mini:3.8b-q4_K_M"
 
-# --- WebSocket Manager for Map ---
+# --- WebSocket Manager for Map & Chat ---
 class RoomManager:
     def __init__(self):
-        # Maps campaign_id -> list of active WebSockets
         self.active_rooms: dict[int, list[WebSocket]] = defaultdict(list)
-        # Maps campaign_id -> dictionary of token states
         self.campaign_states: dict[int, dict] = defaultdict(dict)
 
     async def connect(self, websocket: WebSocket, campaign_id: int):
         await websocket.accept()
         self.active_rooms[campaign_id].append(websocket)
-        # Send current state of THIS campaign to the new connection
         current_state = self.campaign_states.get(campaign_id, {})
-        await websocket.send_text(json.dumps(current_state))
+        await websocket.send_text(json.dumps({"type": "state", "data": current_state}))
 
     def disconnect(self, websocket: WebSocket, campaign_id: int):
         if websocket in self.active_rooms[campaign_id]:
             self.active_rooms[campaign_id].remove(websocket)
 
     async def broadcast(self, data: dict, campaign_id: int):
-        # Update server state for this specific campaign
-        token_id = data.get("id")
-        if campaign_id not in self.campaign_states:
-             self.campaign_states[campaign_id] = {}
-             
-        if token_id not in self.campaign_states[campaign_id]:
-             self.campaign_states[campaign_id][token_id] = {"x": 0, "y": 0, "color": "#fff"}
-             
-        self.campaign_states[campaign_id][token_id]["x"] = data["x"]
-        self.campaign_states[campaign_id][token_id]["y"] = data["y"]
-        
-        # Broadcast only to users in this campaign
-        for connection in self.active_rooms[campaign_id]:
-            await connection.send_text(json.dumps(self.campaign_states[campaign_id]))
+        # If the payload is a chat message, broadcast it to the room immediately
+        if data.get("type") == "chat":
+            for connection in self.active_rooms[campaign_id]:
+                await connection.send_text(json.dumps(data))
+            return
+
+        # Otherwise, update server state for map tokens
+        if data.get("type") == "move":
+            token_id = data.get("id")
+            if campaign_id not in self.campaign_states:
+                 self.campaign_states[campaign_id] = {}
+                 
+            if token_id not in self.campaign_states[campaign_id]:
+                 self.campaign_states[campaign_id][token_id] = {"x": 0, "y": 0, "color": "#fff"}
+                 
+            self.campaign_states[campaign_id][token_id]["x"] = data["x"]
+            self.campaign_states[campaign_id][token_id]["y"] = data["y"]
+            
+            for connection in self.active_rooms[campaign_id]:
+                await connection.send_text(json.dumps({"type": "state", "data": self.campaign_states[campaign_id]}))
 
 room_manager = RoomManager()
-# --- Pydantic Schemas for API ---
+
+# --- Pydantic Schemas ---
 class ChatRequest(BaseModel):
+    campaign_id: int
     message: str
+    character_name: str
 
 class CharCreate(BaseModel):
     name: str
-    char_class: str
-    hp: int
-    ac: int
+    campaign_id: int
+    stats: dict
+    backstory: str = "A standard adventurer."
+
+class UserCreate(BaseModel):
+    username: str
+    password: str
+
+class CampaignCreate(BaseModel):
+    name: str
 
 # --- Routes ---
 @app.get("/")
 async def root():
     return FileResponse("static/index.html")
 
-@app.websocket("/ws/map")
-async def map_socket(websocket: WebSocket):
-    await map_manager.connect(websocket)
-    try:
-        while True:
-            data = await websocket.receive_text()
-            await map_manager.broadcast(json.loads(data))
-    except WebSocketDisconnect:
-        map_manager.disconnect(websocket)
-
-@app.post("/api/character")
-def create_character(char: CharCreate, db: Session = Depends(get_db)):
-    db_char = Character(**char.model_dump())
-    db.add(db_char)
-    db.commit()
-    db.refresh(db_char)
-    return db_char
-
-@app.get("/api/character")
-def get_characters(db: Session = Depends(get_db)):
-    return db.query(Character).all()
-
-class UserCreate(BaseModel):
-    username: str
-    password: str
-
+# --- Auth Routes ---
 @app.post("/api/auth/register")
 def register(user: UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(User).filter(User.username == user.username).first()
@@ -118,10 +105,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     access_token = create_access_token(data={"sub": user.username})
     return {"access_token": access_token, "token_type": "bearer"}
 
-# --- Campaign Routing ---
-class CampaignCreate(BaseModel):
-    name: str
-
+# --- Campaign Routes ---
 @app.post("/api/campaigns")
 def create_campaign(campaign: CampaignCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     new_campaign = Campaign(name=campaign.name, dm_id=current_user.id)
@@ -135,16 +119,40 @@ def join_campaign(invite_code: str, current_user: User = Depends(get_current_use
     campaign = db.query(Campaign).filter(Campaign.invite_code == invite_code).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Invalid invite code")
-    
-    # Logic to link current_user.id to this campaign via a Character or Player junction table goes here
-    return {"message": f"Joined campaign {campaign.name}", "campaign_id": campaign.id}
+    return {"message": f"Joined campaign {campaign.name}", "campaign_id": campaign.id, "campaign_name": campaign.name}
 
-# --- Protected WebSocket Route ---
-# WebSockets can't easily send Auth headers in vanilla JS, so we pass the token in the URL query string
+# --- Character Routes ---
+@app.post("/api/character")
+def create_character(char: CharCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    db_char = Character(
+        name=char.name,
+        owner_id=current_user.id,
+        campaign_id=char.campaign_id,
+        stats=char.stats,
+        backstory=char.backstory
+    )
+    db.add(db_char)
+    db.commit()
+    db.refresh(db_char)
+    return db_char
+
+@app.get("/api/campaigns/{campaign_id}/my-character")
+def get_my_character(campaign_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # Check if the active user has a character in this specific campaign
+    char = db.query(Character).filter(Character.campaign_id == campaign_id, Character.owner_id == current_user.id).first()
+    if not char:
+        raise HTTPException(status_code=404, detail="Character not found")
+    return char
+
+@app.get("/api/campaigns/{campaign_id}/characters")
+def get_campaign_characters(campaign_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # Fetch the whole party so players can see each other
+    return db.query(Character).filter(Character.campaign_id == campaign_id).all()
+
+# --- WebSocket & AI Chat ---
 @app.websocket("/ws/map/{campaign_id}")
 async def map_socket(websocket: WebSocket, campaign_id: int, token: str, db: Session = Depends(get_db)):
     try:
-        # Validate the user's token before letting them into the room
         user = get_current_user(token, db)
     except HTTPException:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
@@ -159,21 +167,22 @@ async def map_socket(websocket: WebSocket, campaign_id: int, token: str, db: Ses
         room_manager.disconnect(websocket, campaign_id)
 
 @app.post("/api/chat")
-async def chat(request: ChatRequest, db: Session = Depends(get_db)):
-    # 1. Save User Message
-    user_msg = ChatMessage(campaign_id=1, sender_type="player", sender_name="Player 1", content=request.message)
+async def chat(request: ChatRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # 1. Broadcast the user's action to the room immediately so everyone sees it
+    await room_manager.broadcast({
+        "type": "chat", "sender": request.character_name, "message": request.message, "role": "user"
+    }, request.campaign_id)
+
+    # 2. Save User Message to History
+    user_msg = ChatMessage(campaign_id=request.campaign_id, sender_type="player", sender_name=request.character_name, content=request.message)
     db.add(user_msg)
     db.commit()
 
-    # 2. Retrieve the Character's Backstory from the SQL database
-    # (Assuming we are querying for the active character. Hardcoded ID=1 for this example)
-    character = db.query(Character).filter(Character.id == 1).first()
-    backstory = character.backstory if character and character.backstory else "A standard adventurer."
-
-    # 3. Retrieve relevant rules from the Vector Database
+    # 3. Get Context (Backstory & Rules)
+    char = db.query(Character).filter(Character.campaign_id == request.campaign_id, Character.owner_id == current_user.id).first()
+    backstory = char.backstory if char and char.backstory else "A standard adventurer."
     relevant_rules = retrieve_relevant_rules(request.message)
 
-    # 4. Construct the Augmented System Prompt
     system_prompt = f"""You are the Dungeon Master. 
     Use the following rules to resolve the player's action if applicable:
     {relevant_rules}
@@ -183,17 +192,15 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
     
     Keep your response to 2-3 sentences. Describe the outcome of their action."""
 
-    # 5. Build Message History
-    history = db.query(ChatMessage).order_by(ChatMessage.id.desc()).limit(10).all()
+    # 4. Fetch Campaign History & Call LLM
+    history = db.query(ChatMessage).filter(ChatMessage.campaign_id == request.campaign_id).order_by(ChatMessage.id.desc()).limit(10).all()
     history.reverse()
     
     messages = [{"role": "system", "content": system_prompt}]
     for msg in history:
-        # Map our DB sender_type to Ollama's expected roles
         role = "assistant" if msg.sender_type == "ai_dm" else "user"
-        messages.append({"role": role, "content": msg.content})
+        messages.append({"role": role, "content": f"[{msg.sender_name}]: {msg.content}"})
 
-    # 6. Call Local LLM
     payload = {"model": MODEL_NAME, "messages": messages, "stream": False}
     
     async with httpx.AsyncClient() as client:
@@ -204,9 +211,13 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
         except Exception as e:
             ai_text = f"System Error: {str(e)}"
 
-    # 7. Save AI Response
-    ai_msg = ChatMessage(campaign_id=1, sender_type="ai_dm", sender_name="DM", content=ai_text)
+    # 5. Save and Broadcast AI Response to everyone
+    ai_msg = ChatMessage(campaign_id=request.campaign_id, sender_type="ai_dm", sender_name="DM", content=ai_text)
     db.add(ai_msg)
     db.commit()
 
-    return {"reply": ai_text}
+    await room_manager.broadcast({
+        "type": "chat", "sender": "DM", "message": ai_text, "role": "ai"
+    }, request.campaign_id)
+
+    return {"status": "success"}
