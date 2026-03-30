@@ -10,6 +10,7 @@ from collections import defaultdict
 from fastapi.security import OAuth2PasswordRequestForm
 from backend.auth import get_password_hash, verify_password, create_access_token, get_current_user
 from backend.database import get_db, Character, ChatMessage, User, Campaign
+from backend.rag import retrieve_relevant_rules
 
 app = FastAPI()
 
