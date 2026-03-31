@@ -57,16 +57,26 @@ class RoomManager:
         self.active_rooms[campaign_id].append(websocket)
         current_state = self.campaign_states.get(campaign_id, {})
         await websocket.send_text(json.dumps({"type": "state", "data": current_state}))
+        await websocket.send_text(json.dumps({"type": "ready_update", "states": self.ready_states.get(campaign_id, {})}))
         await websocket.send_text(json.dumps({"type": "turn_update", "turn": self.turn_order[campaign_id]}))
 
     async def disconnect(self, websocket: WebSocket, campaign_id: int):
         if websocket in self.active_rooms[campaign_id]:
             self.active_rooms[campaign_id].remove(websocket)
+            await self.broadcast({"type": "system", "action": "reload_party"}, campaign_id)
 
     async def broadcast(self, data: dict, campaign_id: int):
         if data.get("type") in ["chat", "system", "turn_update", "char_update"]:
             for connection in self.active_rooms[campaign_id]:
                 await connection.send_text(json.dumps(data))
+            return
+
+        if data.get("type") == "ready_toggle":
+            char_name = data.get("character_name")
+            is_ready = data.get("is_ready")
+            self.ready_states[campaign_id][char_name] = is_ready
+            for connection in self.active_rooms[campaign_id]:
+                await connection.send_text(json.dumps({"type": "ready_update", "states": self.ready_states[campaign_id]}))
             return
 
         if data.get("type") == "move":
@@ -140,7 +150,7 @@ def join_campaign(invite_code: str, current_user: User = Depends(get_current_use
     campaign = db.query(Campaign).filter(Campaign.invite_code == invite_code).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Invalid invite code")
-    return {"message": f"Joined", "campaign_id": campaign.id, "campaign_name": campaign.name}
+    return {"message": f"Joined campaign {campaign.name}", "campaign_id": campaign.id, "campaign_name": campaign.name}
 
 @app.get("/api/campaigns/my")
 def get_my_campaigns(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -174,6 +184,46 @@ async def generate_campaign_outline(campaign_id: int, current_user: User = Depen
     campaign.story_outline = outline
     db.commit()
     return {"message": "Outline generated successfully", "outline": outline}
+
+
+# ==============================================================
+# RESTORED RULEBOOK RAG UPLOADER
+# ==============================================================
+def process_rulebook(content: bytes, filename: str):
+    try:
+        print(f"Starting to process massive rulebook: {filename}")
+        if filename.endswith('.pdf'):
+            import PyPDF2
+            import io
+            pdf_reader = PyPDF2.PdfReader(io.BytesIO(content))
+            text = "\n".join([page.extract_text() for page in pdf_reader.pages if page.extract_text()])
+        else:
+            text = content.decode("utf-8")
+            
+        from langchain_text_splitters import RecursiveCharacterTextSplitter
+        splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
+        chunks = splitter.split_text(text)
+        
+        from backend.rag import rules_collection
+        batch_size = 100
+        for i in range(0, len(chunks), batch_size):
+            batch_chunks = chunks[i:i + batch_size]
+            ids = [f"rule_{secrets.token_hex(4)}" for _ in batch_chunks]
+            if batch_chunks:
+                rules_collection.upsert(documents=batch_chunks, ids=ids)
+            print(f"Embedded batch {i//batch_size + 1} of {(len(chunks)//batch_size) + 1}...")
+            
+        print(f"Finished successfully embedding {filename} into the AI's memory!")
+    except Exception as e:
+        print(f"CRITICAL ERROR processing rulebook {filename}: {str(e)}")
+
+@app.post("/api/upload-rules")
+async def upload_rules(background_tasks: BackgroundTasks, file: UploadFile = File(...), current_user: User = Depends(get_current_user)):
+    content = await file.read()
+    background_tasks.add_task(process_rulebook, content, file.filename)
+    return {"message": "Upload caught! The AI is reading the rulebook in the background."}
+# ==============================================================
+
 
 @app.post("/api/character")
 def create_character(char: CharCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -294,7 +344,7 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
     
     CRITICAL AI DIRECTIVES (DO NOT FAIL THESE):
     1. NEVER repeat the phrase "Would you like an Intelligence check" or similar repetitive loops. You are the DM. You narrate what happens and move the story forward.
-    2. YOU decide the consequences. If a player acts stupidly (e.g., throwing their arm), narrate the bloody, painful consequence and apply damage.
+    2. YOU decide the consequences. If a player acts stupidly, narrate the bloody, painful consequence and apply damage.
     3. TRACK HIT POINTS: If a character takes damage or heals, you MUST include this exact tag at the end of your response: [UPDATE_HP: CharacterName, -X] (e.g., [UPDATE_HP: Cory, -8]).
     4. COMBAT & TURNS: If a fight breaks out, announce initiative and set the turn by outputting: [SET_TURN: CharacterName]. When combat is over, output: [END_COMBAT].
     5. Be decisive. Do not ask permission. Describe the environment, state what the NPCs do, and ask what the specific player whose turn it is does next.
