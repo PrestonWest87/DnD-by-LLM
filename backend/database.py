@@ -1,6 +1,7 @@
-from sqlalchemy import create_engine, Column, Integer, String, Text, ForeignKey, JSON
+from sqlalchemy import create_engine, Column, Integer, String, Text, ForeignKey, JSON, Boolean, DateTime
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 import secrets
+import datetime
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./vtt_master.db"
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
@@ -23,8 +24,13 @@ class Campaign(Base):
     invite_code = Column(String, unique=True, index=True, default=lambda: secrets.token_hex(4))
     dm_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     
-    # Store the AI's secret campaign outline
+    # New Campaign Data
+    custom_setting = Column(Text, nullable=True)
     story_outline = Column(Text, nullable=True) 
+    
+    # Session Management
+    is_session_active = Column(Boolean, default=False)
+    last_active_time = Column(DateTime, default=datetime.datetime.utcnow)
     
     dm = relationship("User", back_populates="dm_campaigns")
     characters = relationship("Character", back_populates="campaign")
@@ -50,6 +56,7 @@ class ChatMessage(Base):
     sender_type = Column(String) 
     sender_name = Column(String)
     content = Column(Text)
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
     
     campaign = relationship("Campaign", back_populates="messages")
 
