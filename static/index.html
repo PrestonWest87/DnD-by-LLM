@@ -21,7 +21,6 @@
         .camp-list-item { background: #2c2c2c; padding: 10px; margin-bottom: 10px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; border-left: 4px solid #4facfe;}
         .camp-badge { background: #111; padding: 3px 8px; border-radius: 10px; font-size: 11px; color: #ccc;}
 
-        /* Character Sheet Grid Updates */
         .sheet-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; text-align: left; margin-bottom: 15px;}
         .attr-row { display: flex; justify-content: space-between; align-items: center; background: #222; padding: 8px; margin-bottom: 5px; border-radius: 4px; border: 1px solid #444;}
         .attr-label { width: 40px; font-weight: bold; color: #aaa; cursor: help; border-bottom: 1px dotted #888;}
@@ -46,9 +45,11 @@
         #vtt-screen { display: none; width: 100%; height: 100%; flex-direction: row; }
         .panel { padding: 20px; border-right: 1px solid #333; overflow-y: auto; }
         #left-panel { width: 280px; background: #1e1e1e; }
-        #center-panel { flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #181818; }
+        #center-panel { flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #181818; position: relative;}
         #right-panel { width: 350px; background: #1e1e1e; display: flex; flex-direction: column; }
         
+        #turn-tracker { position: absolute; top: 10px; background: #e74c3c; color: white; padding: 8px 20px; border-radius: 20px; font-weight: bold; border: 2px solid white; display: none; box-shadow: 0 4px 10px rgba(0,0,0,0.5);}
+
         canvas { background: #2b2b2b; border: 2px solid #555; cursor: grab; box-shadow: 0 4px 8px rgba(0,0,0,0.5); }
         .char-card { background: #2c2c2c; padding: 12px; margin-bottom: 12px; border-radius: 5px; border-left: 4px solid #3498db; font-size: 13px; position: relative; cursor: pointer; transition: background 0.2s;}
         .char-card:hover { background: #3c3c3c; }
@@ -83,7 +84,7 @@
             <div style="font-size: 13px; color: #aaa; margin-bottom: 15px;" id="modal-subtitle">Level 1 Race Class</div>
             
             <div class="derived-stats" style="margin-bottom: 15px; padding: 10px;">
-                <div class="d-stat"><div class="d-val" id="modal-hp">10</div><div class="d-lbl">Max HP</div></div>
+                <div class="d-stat"><div class="d-val" id="modal-hp">10</div><div class="d-lbl">Current HP</div></div>
                 <div class="d-stat"><div class="d-val" id="modal-ac">10</div><div class="d-lbl">AC</div></div>
                 <div class="d-stat"><div class="d-val" id="modal-prof">+2</div><div class="d-lbl">Prof Bonus</div></div>
                 <div class="d-stat"><div class="d-val" id="modal-exp">0</div><div class="d-lbl">EXP</div></div>
@@ -127,6 +128,7 @@
 
             <hr style="border-color: #333; margin-bottom: 15px;">
             <input type="text" id="new-camp-name" placeholder="New Campaign Name">
+            <textarea id="new-camp-setting" placeholder="Custom DM Settings/Lore (Optional)" style="height: 60px; font-size: 12px;"></textarea>
             <select id="new-camp-dm" style="margin-bottom: 10px;">
                 <option value="ai">🤖 AI Dungeon Master</option>
                 <option value="human">🧙‍♂️ I will be the Dungeon Master</option>
@@ -271,10 +273,13 @@
             <h3 id="party-header" style="margin-top: 0;" title="Click any character card to view their full Character Sheet.">Campaign Party ⓘ</h3>
             <div id="char-list"></div>
         </div>
+        
         <div id="center-panel" class="panel">
+            <div id="turn-tracker">Turn: Free Movement</div>
             <h2 id="map-title">Battle Map</h2>
             <canvas id="map" width="600" height="600"></canvas>
         </div>
+
         <div id="right-panel" class="panel">
             <h3>Communication</h3>
             <div id="chat-log"></div>
@@ -308,13 +313,14 @@
     <script>
         // --- DATA & STATE ---
         let currentCampaignId = null; let currentCampaignName = "";
+        let isSessionActive = false; let currentTurn = "Free Movement";
         let myCharacter = null; let ws = null;
         let finalStats = {}; let globalReadyStates = {}; let partyDataCache = {};
         let rollsRemaining = 3;
         
         const attributes = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
         const standardArray = [15, 14, 13, 12, 10, 8];
-        let currentGenMethod = 'std'; // std, roll, man
+        let currentGenMethod = 'std';
 
         const classEquipmentData = {
             Barbarian: { weapons: ['Greataxe', 'Two Handaxes'], armor: ['Unarmored (AC 10)'], skills: 2, choices: ['Animal Handling', 'Athletics', 'Intimidation', 'Nature', 'Perception', 'Survival'] },
@@ -331,7 +337,6 @@
             Wizard: { weapons: ['Quarterstaff', 'Dagger'], armor: ['Unarmored (AC 10)'], skills: 2, choices: ['Arcana', 'History', 'Insight', 'Investigation', 'Medicine', 'Religion'] }
         };
 
-        // --- AUTH & NETWORK ---
         async function authFetch(url, options = {}) {
             const token = localStorage.getItem('vtt_token');
             if (!options.headers) options.headers = {};
@@ -397,7 +402,7 @@
                         list.innerHTML += `
                             <div class="camp-list-item">
                                 <div><b>${c.name}</b>${codeDisp}<br><span class="camp-badge">${c.role}</span></div>
-                                <button onclick="enterCampaign(${c.id}, '${safeName}')" style="width: 80px; margin: 0; background: #2ecc71;">Launch</button>
+                                <button onclick="enterCampaign(${c.id}, '${safeName}', ${c.active})" style="width: 80px; margin: 0; background: #2ecc71;">Launch</button>
                             </div>
                         `;
                     });
@@ -415,22 +420,20 @@
             const token = localStorage.getItem('vtt_token');
             const res = await fetch('/api/upload-rules', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData });
             
-            if (res.ok) {
-                msgEl.style.color = "#2ecc71"; msgEl.innerText = (await res.json()).message;
-            } else {
-                msgEl.style.color = "#e74c3c"; msgEl.innerText = "Upload failed.";
-            }
+            if (res.ok) { msgEl.style.color = "#2ecc71"; msgEl.innerText = (await res.json()).message; } 
+            else { msgEl.style.color = "#e74c3c"; msgEl.innerText = "Upload failed."; }
         }
 
         async function createCampaign() {
             const name = document.getElementById('new-camp-name').value;
+            const setting = document.getElementById('new-camp-setting').value;
             const isAiDm = document.getElementById('new-camp-dm').value === 'ai';
             if(!name) return;
             try {
                 const res = await authFetch('/api/campaigns', {
-                    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: name, ai_dm: isAiDm})
+                    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: name, custom_setting: setting, ai_dm: isAiDm})
                 });
-                if (res.ok) { const data = await res.json(); enterCampaign(data.id, data.name); }
+                if (res.ok) { const data = await res.json(); enterCampaign(data.id, data.name, false); }
             } catch (e) { }
         }
 
@@ -439,35 +442,19 @@
             if(!code) return;
             try {
                 const res = await authFetch(`/api/campaigns/join/${code}`, { method: 'POST' });
-                if (res.ok) { const data = await res.json(); enterCampaign(data.campaign_id, data.campaign_name); } 
+                if (res.ok) { const data = await res.json(); enterCampaign(data.campaign_id, data.campaign_name, true); } 
                 else { document.getElementById('lobby-msg').innerText = "Invalid invite code."; }
             } catch (e) { }
         }
 
-        // --- CHARACTER CREATOR ---
         function updateClassOptions() {
             const charClass = document.getElementById('char-class').value;
             const data = classEquipmentData[charClass];
-            
-            // Update Weapons
-            const wSelect = document.getElementById('char-weapon');
-            wSelect.innerHTML = data.weapons.map(w => `<option value="${w}">${w}</option>`).join('');
-            
-            // Update Armor
-            const aSelect = document.getElementById('char-armor');
-            aSelect.innerHTML = data.armor.map(a => `<option value="${a}">${a}</option>`).join('');
-
-            // Update Skills
-            const sContainer = document.getElementById('skills-container');
-            sContainer.innerHTML = data.choices.map(s => `
-                <label class="skill-item" title="Class skill option">
-                    <input type="checkbox" value="${s}" onchange="checkSkillLimit(this)"> ${s}
-                </label>
-            `).join('');
-            
+            document.getElementById('char-weapon').innerHTML = data.weapons.map(w => `<option value="${w}">${w}</option>`).join('');
+            document.getElementById('char-armor').innerHTML = data.armor.map(a => `<option value="${a}">${a}</option>`).join('');
+            document.getElementById('skills-container').innerHTML = data.choices.map(s => `<label class="skill-item"><input type="checkbox" value="${s}" onchange="checkSkillLimit(this)"> ${s}</label>`).join('');
             document.getElementById('skill-limit-text').innerText = `(Choose ${data.skills})`;
             document.getElementById('skill-limit-text').dataset.limit = data.skills;
-
             calcStats();
         }
 
@@ -481,48 +468,32 @@
         function buildAttrUI() {
             const container = document.getElementById('attr-container');
             container.innerHTML = '';
-            
             attributes.forEach((attr, idx) => {
                 let inputHtml = '';
                 if (currentGenMethod === 'std') {
                     let options = standardArray.map(val => `<option value="${val}" ${val===standardArray[idx]?'selected':''}>${val}</option>`).join('');
                     inputHtml = `<select class="attr-input" id="base-${attr}" onchange="calcStats()">${options}</select>`;
                 } else if (currentGenMethod === 'roll') {
-                    // LOCKED INPUT
                     inputHtml = `<input type="number" class="attr-input" id="base-${attr}" value="10" readonly>`;
                 } else {
                     inputHtml = `<input type="number" class="attr-input" id="base-${attr}" value="10" min="3" max="20" onchange="calcStats()">`;
                 }
-
-                container.innerHTML += `
-                    <div class="attr-row">
-                        <div class="attr-label" title="Base Attribute Score">${attr}</div>
-                        ${inputHtml}
-                        <div style="font-size:10px; color:#888;">Base</div>
-                        <div class="attr-result" id="res-${attr}">10</div>
-                        <div class="attr-mod" id="mod-${attr}">+0</div>
-                    </div>
-                `;
+                container.innerHTML += `<div class="attr-row"><div class="attr-label" title="Base Attribute Score">${attr}</div>${inputHtml}<div style="font-size:10px; color:#888;">Base</div><div class="attr-result" id="res-${attr}">10</div><div class="attr-mod" id="mod-${attr}">+0</div></div>`;
             });
         }
 
         function setGenMethod(method) {
-            if (method === 'roll' && rollsRemaining <= 0) return; // Prevent clicking if out of rolls
-            
+            if (method === 'roll' && rollsRemaining <= 0) return;
             currentGenMethod = method;
             document.querySelectorAll('.gen-btn').forEach(b => b.classList.remove('active'));
             document.getElementById(`btn-${method}`).classList.add('active');
             buildAttrUI();
-
             if (method === 'roll') {
-                rollsRemaining--;
-                document.getElementById('btn-roll').innerText = `Roll 4d6 (${rollsRemaining} Left)`;
+                rollsRemaining--; document.getElementById('btn-roll').innerText = `Roll 4d6 (${rollsRemaining} Left)`;
                 if (rollsRemaining <= 0) document.getElementById('btn-roll').disabled = true;
-
                 attributes.forEach(attr => {
                     let rolls = [Math.floor(Math.random()*6)+1, Math.floor(Math.random()*6)+1, Math.floor(Math.random()*6)+1, Math.floor(Math.random()*6)+1].sort((a,b)=>b-a);
-                    let sum = rolls[0] + rolls[1] + rolls[2];
-                    document.getElementById(`base-${attr}`).value = sum;
+                    document.getElementById(`base-${attr}`).value = rolls[0] + rolls[1] + rolls[2];
                 });
             }
             calcStats();
@@ -545,27 +516,17 @@
             attributes.forEach(attr => {
                 const inputEl = document.getElementById(`base-${attr}`);
                 if (!inputEl) return;
-                const base = parseInt(inputEl.value) || 10;
-                const total = base + raceBonuses[attr];
+                const total = (parseInt(inputEl.value) || 10) + raceBonuses[attr];
                 const mod = Math.floor((total - 10) / 2);
-                const modStr = mod >= 0 ? `+${mod}` : `${mod}`;
-                
                 document.getElementById(`res-${attr}`).innerText = total;
-                document.getElementById(`mod-${attr}`).innerText = modStr;
-                
-                finalStats[attr] = total;
-                finalStats[`${attr}_mod`] = modStr;
-
-                if (attr === 'CON') conMod = mod;
-                if (attr === 'DEX') dexMod = mod;
+                document.getElementById(`mod-${attr}`).innerText = mod >= 0 ? `+${mod}` : `${mod}`;
+                finalStats[attr] = total; finalStats[`${attr}_mod`] = mod >= 0 ? `+${mod}` : `${mod}`;
+                if (attr === 'CON') conMod = mod; if (attr === 'DEX') dexMod = mod;
             });
 
-            // Extract AC from string "Chain Mail (AC 16)" -> 16
             const armorStr = document.getElementById('char-armor').value || "Unarmored (AC 10)";
             const match = armorStr.match(/AC (\d+)/);
             let baseAc = match ? parseInt(match[1]) : 10;
-            
-            // Add DEX to light/medium armors (simplified logic)
             if (armorStr.includes('Leather') || armorStr.includes('Unarmored')) baseAc += dexMod;
             if (armorStr.includes('Scale')) baseAc += Math.min(2, dexMod);
 
@@ -576,57 +537,35 @@
             if (charClass === 'Sorcerer' || charClass === 'Wizard') baseHp = 6;
             
             const maxHp = baseHp + conMod;
-
             document.getElementById('disp-hp').innerText = maxHp;
             document.getElementById('disp-ac').innerText = baseAc;
             document.getElementById('disp-init').innerText = dexMod >= 0 ? `+${dexMod}` : `${dexMod}`;
 
-            const selectedSkills = Array.from(document.querySelectorAll('#skills-container input:checked')).map(cb => cb.value);
-
-            finalStats.race = race;
-            finalStats.char_class = charClass;
-            finalStats.background = document.getElementById('char-background').value;
-            finalStats.alignment = document.getElementById('char-alignment').value;
-            finalStats.level = 1;
-            finalStats.hp = maxHp;
-            finalStats.ac = baseAc;
-            finalStats.prof_bonus = 2;
-            finalStats.exp = 0;
-            finalStats.equipment = {
-                weapon: document.getElementById('char-weapon').value,
-                armor: armorStr
-            };
-            finalStats.skills = selectedSkills;
+            finalStats.race = race; finalStats.char_class = charClass; finalStats.background = document.getElementById('char-background').value;
+            finalStats.alignment = document.getElementById('char-alignment').value; finalStats.level = 1; finalStats.hp = maxHp; finalStats.max_hp = maxHp;
+            finalStats.ac = baseAc; finalStats.prof_bonus = 2; finalStats.exp = 0;
+            finalStats.equipment = { weapon: document.getElementById('char-weapon').value, armor: armorStr };
+            finalStats.skills = Array.from(document.querySelectorAll('#skills-container input:checked')).map(cb => cb.value);
         }
 
-        async function enterCampaign(id, name) {
-            currentCampaignId = id; currentCampaignName = name;
+        async function enterCampaign(id, name, active) {
+            currentCampaignId = id; currentCampaignName = name; isSessionActive = active;
             try {
                 const res = await authFetch(`/api/campaigns/${id}/my-character`);
-                if (res.ok) {
-                    myCharacter = await res.json();
-                    launchVTT();
-                } else {
-                    document.getElementById('char-msg').innerText = "";
-                    showScreen('char-screen');
+                if (res.ok) { myCharacter = await res.json(); launchVTT(); } 
+                else {
+                    document.getElementById('char-msg').innerText = ""; showScreen('char-screen');
                     rollsRemaining = 3; document.getElementById('btn-roll').innerText = `Roll 4d6 (3 Left)`; document.getElementById('btn-roll').disabled = false;
-                    currentGenMethod = 'std';
-                    buildAttrUI(); updateClassOptions(); calcStats(); 
+                    currentGenMethod = 'std'; buildAttrUI(); updateClassOptions(); calcStats(); 
                 }
             } catch (e) { }
         }
 
         async function submitCharacter() {
-            const payload = {
-                name: document.getElementById('char-name').value || "Unnamed Hero",
-                campaign_id: currentCampaignId,
-                stats: finalStats,
-                backstory: document.getElementById('char-backstory').value || "No specific backstory provided."
-            };
+            const payload = { name: document.getElementById('char-name').value || "Unnamed Hero", campaign_id: currentCampaignId, stats: finalStats, backstory: document.getElementById('char-backstory').value || "No specific backstory provided." };
             try {
                 const res = await authFetch('/api/character', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
-                if (res.ok) { myCharacter = await res.json(); launchVTT(); } 
-                else { document.getElementById('char-msg').innerText = "Failed to create character."; }
+                if (res.ok) { myCharacter = await res.json(); launchVTT(); } else { document.getElementById('char-msg').innerText = "Failed to create character."; }
             } catch (e) { }
         }
 
@@ -663,16 +602,13 @@
             showScreen('vtt-screen'); loadChatHistory(); initWebSocket(); loadParty();
         }
 
-        // --- DICE & VTT INTERACTION ---
         function rollVttDice(sides) {
             const result = Math.floor(Math.random() * sides) + 1;
-            document.getElementById('chat-input').value = `[Rolled 1d${sides}] Result: ${result}`;
-            document.getElementById('chat-type').value = "action";
+            document.getElementById('chat-input').value = `[Rolled 1d${sides}] Result: ${result}`; document.getElementById('chat-type').value = "action";
         }
 
         function submitManualDice() {
-            const val = document.getElementById('manual-dice').value;
-            if(!val) return;
+            const val = document.getElementById('manual-dice').value; if(!val) return;
             document.getElementById('chat-input').value = `[Manual Roll Entered] Result: ${val}`;
             document.getElementById('chat-type').value = "action"; document.getElementById('manual-dice').value = '';
         }
@@ -687,24 +623,18 @@
             document.getElementById('start-session-btn').style.display = 'none';
             const log = document.getElementById('chat-log');
             log.innerHTML += `<div id="typing" class="msg-ai" style="opacity: 0.5;"><i>DM is preparing the session...</i></div>`; log.scrollTop = log.scrollHeight;
-            try { await authFetch('/api/chat', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ campaign_id: currentCampaignId, message: "We are all ready to begin! Please introduce the campaign setting.", character_name: "Party" }) }); } catch(e) {}
-        }
-
-        async function generateStoryOutline() {
-            const btn = document.querySelector('#dm-controls button'); btn.innerText = "Generating..."; btn.disabled = true;
-            try { await authFetch(`/api/campaigns/${currentCampaignId}/generate-outline`, { method: 'POST' }); btn.innerText = "Outline Generated!"; } 
-            catch(e) { btn.innerText = "Error Generating"; }
-            setTimeout(() => { btn.innerText = "Generate AI Story Outline"; btn.disabled = false; }, 3000);
+            try { 
+                await authFetch('/api/chat', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ campaign_id: currentCampaignId, message: "We are all ready to begin! What happens next?", character_name: "System", is_session_start: true }) }); 
+            } catch(e) {}
         }
 
         function showCharacterSheet(charName) {
-            const char = partyDataCache[charName];
-            if (!char || !char.stats) return;
+            const char = partyDataCache[charName]; if (!char || !char.stats) return;
             const stats = typeof char.stats === 'string' ? JSON.parse(char.stats) : char.stats;
 
             document.getElementById('modal-name').innerText = char.name;
             document.getElementById('modal-subtitle').innerText = `Level ${stats.level || 1} ${stats.race || ''} ${stats.char_class || ''} (${stats.alignment || 'Neutral'})`;
-            document.getElementById('modal-hp').innerText = stats.hp || 0;
+            document.getElementById('modal-hp').innerText = `${stats.hp || 0} / ${stats.max_hp || 0}`;
             document.getElementById('modal-ac').innerText = stats.ac || 0;
             document.getElementById('modal-prof').innerText = `+${stats.prof_bonus || 2}`;
             document.getElementById('modal-exp').innerText = stats.exp || 0;
@@ -715,7 +645,6 @@
             const equip = stats.equipment || {weapon: 'Unarmed', armor: 'Unarmored'};
             const skills = (stats.skills || []).join(', ');
             document.getElementById('modal-equipment').innerHTML = `<b>Weapon:</b> ${equip.weapon}<br><b>Armor:</b> ${equip.armor}<br><br><b>Proficient Skills:</b><br>${skills || 'None'}`;
-
             document.getElementById('modal-backstory').innerText = char.backstory || "No backstory provided.";
             document.getElementById('char-sheet-modal').style.display = 'flex';
         }
@@ -725,39 +654,29 @@
                 const res = await authFetch(`/api/campaigns/${currentCampaignId}/characters`);
                 if (!res.ok) return;
                 const chars = await res.json();
-                const list = document.getElementById('char-list');
-                list.innerHTML = '';
-                
+                const list = document.getElementById('char-list'); list.innerHTML = '';
                 let allPlayersReady = true; let playerCount = 0;
 
                 chars.forEach(c => {
-                    partyDataCache[c.name] = c; // Save for modal view
+                    partyDataCache[c.name] = c;
                     const stats = typeof c.stats === 'string' ? JSON.parse(c.stats) : (c.stats || {});
                     const border = (myCharacter && c.name === myCharacter.name) ? 'border-left: 4px solid #2ecc71;' : 'border-left: 4px solid #3498db;';
-                    
                     const isReady = globalReadyStates[c.name];
                     if (!isReady) allPlayersReady = false; playerCount++;
-
                     const badgeStyle = isReady ? "display: block;" : "display: none;";
 
                     list.innerHTML += `
                         <div class="char-card" style="${border}" onclick="showCharacterSheet('${c.name.replace(/'/g, "\\'")}')" title="Click to view full character sheet">
                             <div class="ready-badge" style="${badgeStyle}">✓</div>
-                            <div class="char-card-header">
-                                <b style="font-size: 15px;">${c.name}</b>
-                                <span style="color: #aaa;">Lvl ${stats.level || 1} ${stats.race || ''} ${stats.char_class || ''}</span>
-                            </div>
+                            <div class="char-card-header"><b style="font-size: 15px;">${c.name}</b><span style="color: #aaa;">Lvl ${stats.level || 1} ${stats.char_class || ''}</span></div>
                             <div style="margin-bottom: 8px; color: #fff;">❤️ ${stats.hp || 0} HP &nbsp;&nbsp;|&nbsp;&nbsp; 🛡️ ${stats.ac || 0} AC</div>
-                            <div class="char-card-stats">
-                                <div class="stat-badge">STR: ${stats.STR || 10}</div><div class="stat-badge">DEX: ${stats.DEX || 10}</div><div class="stat-badge">CON: ${stats.CON || 10}</div>
-                                <div class="stat-badge">INT: ${stats.INT || 10}</div><div class="stat-badge">WIS: ${stats.WIS || 10}</div><div class="stat-badge">CHA: ${stats.CHA || 10}</div>
-                            </div>
                         </div>
                     `;
                 });
 
                 const btn = document.getElementById('start-session-btn');
-                if (playerCount > 0 && allPlayersReady && myCharacter && myCharacter.role !== 'DM') btn.style.display = 'block'; else btn.style.display = 'none';
+                if (playerCount > 0 && allPlayersReady && myCharacter && myCharacter.role !== 'DM' && !isSessionActive) btn.style.display = 'block'; 
+                else btn.style.display = 'none';
 
             } catch(e) {}
         }
@@ -772,7 +691,14 @@
             ws.onmessage = (event) => {
                 const payload = JSON.parse(event.data);
                 if (payload.type === 'system' && payload.action === 'reload_party') loadParty();
+                if (payload.type === 'char_update') loadParty();
                 if (payload.type === 'ready_update') { globalReadyStates = payload.states; loadParty(); }
+                if (payload.type === 'turn_update') { 
+                    currentTurn = payload.turn;
+                    const tracker = document.getElementById('turn-tracker');
+                    if (currentTurn !== "Free Movement") { tracker.style.display = 'block'; tracker.innerText = `Turn: ${currentTurn}`; }
+                    else { tracker.style.display = 'none'; }
+                }
                 if (payload.type === 'state') {
                     for (const id in payload.data) { if (draggingToken !== id) tokens[id] = payload.data[id]; } drawMap();
                 }
@@ -797,6 +723,12 @@
         canvas.addEventListener('mousedown', e => {
             const rect = canvas.getBoundingClientRect(); const mx = e.clientX - rect.left; const my = e.clientY - rect.top;
             for (const [id, t] of Object.entries(tokens)) { if (Math.hypot(mx - t.x, my - t.y) < 20) { draggingToken = id; return; } }
+            
+            // TURN LOCK LOGIC
+            if (currentTurn !== "Free Movement" && (!myCharacter || myCharacter.name !== currentTurn) && myCharacter.role !== 'DM') {
+                return; // Block spawn/drag if it's combat and not their turn!
+            }
+
             if (myCharacter && myCharacter.role === 'DM') {
                 const enemyCount = Object.keys(tokens).filter(k => k.startsWith("NPC")).length + 1; draggingToken = `NPC-${enemyCount}`; tokens[draggingToken] = {x: mx, y: my, color: "#e74c3c"};
             } else if (myCharacter) {
@@ -807,6 +739,8 @@
 
         canvas.addEventListener('mousemove', e => {
             if (draggingToken && ws && ws.readyState === WebSocket.OPEN) {
+                // TURN LOCK LOGIC (Double check on move)
+                if (currentTurn !== "Free Movement" && draggingToken !== currentTurn && !draggingToken.startsWith("NPC")) return;
                 const rect = canvas.getBoundingClientRect(); tokens[draggingToken].x = e.clientX - rect.left; tokens[draggingToken].y = e.clientY - rect.top; drawMap();
                 ws.send(JSON.stringify({type: "move", id: draggingToken, x: tokens[draggingToken].x, y: tokens[draggingToken].y}));
             }
@@ -827,7 +761,14 @@
             else if (type === 'action') {
                 const log = document.getElementById('chat-log');
                 log.innerHTML += `<div id="typing" class="msg-ai" style="opacity: 0.5;"><i>DM is resolving action...</i></div>`; log.scrollTop = log.scrollHeight;
-                try { await authFetch('/api/chat', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ campaign_id: currentCampaignId, message: msg, character_name: myCharacter.name }) }); } catch(e) {}
+                try { 
+                    const res = await authFetch('/api/chat', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ campaign_id: currentCampaignId, message: msg, character_name: myCharacter.name }) });
+                    const data = await res.json();
+                    if (data.error) {
+                        typingEl.remove();
+                        log.innerHTML += `<div class="msg-ai" style="color: #e74c3c;"><b>System:</b> ${data.error}</div>`; log.scrollTop = log.scrollHeight;
+                    }
+                } catch(e) {}
             }
         }
     </script>
