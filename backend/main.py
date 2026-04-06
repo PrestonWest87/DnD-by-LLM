@@ -1,5 +1,6 @@
 import os
 import re
+from fastapi.responses import FileResponse
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
