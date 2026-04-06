@@ -13,6 +13,20 @@ app = FastAPI()
 os.makedirs("./data", exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# --- ADD THESE ROUTES ---
+@app.get("/")
+async def serve_frontend():
+    """Serves the main VTT application"""
+    return FileResponse("static/index.html")
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    """Prevents the browser console from throwing NS_BINDING_ABORTED errors"""
+    # If you don't have a favicon file yet, you can comment this out or ignore the browser warning.
+    # If you do, place it in the static folder:
+    return FileResponse("static/favicon.ico") 
+# ------------------------
+
 def parse_ai_commands(ai_response: str, campaign_id: int, db: Session):
     cleaned_text = ai_response
     hp_matches = re.finditer(r'\[UPDATE_HP:\s*(.+?),\s*([-+]\d+)\]', ai_response, re.IGNORECASE)
