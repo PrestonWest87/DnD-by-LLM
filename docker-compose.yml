@@ -4,12 +4,10 @@ services:
     ports:
       - "8600:8600"
     volumes:
-      - .:/app  # Live reload for development
+      - .:/app
+      - ./data:/app/data  # Persist DB and ChromaDB locally
     environment:
-      # Use host.docker.internal to route out of the container to your host machine
       - OLLAMA_URL=http://host.docker.internal:11434
-      - ANONYMIZED_TELEMETRY=False
-      - SECRET_KEY=change-this-to-a-secure-random-string-in-production
+      - SECRET_KEY=super-secret-key-change-in-production
     extra_hosts:
-      # Required for Linux hosts to resolve host.docker.internal
       - "host.docker.internal:host-gateway"
