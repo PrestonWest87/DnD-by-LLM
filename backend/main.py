@@ -1,7 +1,9 @@
 import os
 import re
+import httpx
+from fastapi import HTTPException
 from fastapi.responses import FileResponse
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from backend.database import get_db, Character, ChatMessage, Campaign
@@ -20,12 +22,42 @@ async def serve_frontend():
     """Serves the main VTT application"""
     return FileResponse("static/index.html")
 
+# Replace your current favicon route with this:
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
-    """Prevents the browser console from throwing NS_BINDING_ABORTED errors"""
-    # If you don't have a favicon file yet, you can comment this out or ignore the browser warning.
-    # If you do, place it in the static folder:
-    return FileResponse("static/favicon.ico") 
+    """Returns a safe 'No Content' response to prevent 502 gateway errors"""
+    return Response(status_code=204)
+
+# Add this to backend/main.py
+@app.post("/api/campaigns/{campaign_id}/generate-outline")
+async def generate_campaign_outline(campaign_id: int, db: Session = Depends(get_db)):
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    characters = db.query(Character).filter(Character.campaign_id == campaign_id).all()
+    party_desc = "\n".join([f"- {c.name}: {c.backstory}" for c in characters])
+    
+    prompt = f"""You are an expert Dungeon Master creating a D&D 5e campaign.
+    Setting Notes: {campaign.custom_setting}
+    Party: {party_desc}
+    Write a 3-act story outline with specific planned NPCs and encounters."""
+    
+    OLLAMA_URL = os.getenv("OLLAMA_URL", "http://host.docker.internal:11434")
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(
+                f"{OLLAMA_URL}/api/generate", 
+                json={"model": "phi4-mini:3.8b-q4_K_M", "prompt": prompt, "stream": False}, 
+                timeout=120.0
+            )
+            outline = response.json().get("response", "Default Outline.")
+            campaign.story_outline = outline
+            db.commit()
+            return {"message": "Outline generated successfully", "outline": outline}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
 # ------------------------
 
 def parse_ai_commands(ai_response: str, campaign_id: int, db: Session):
