@@ -315,16 +315,16 @@ export default function GameRoom() {
         </div>
       </div>
       
-      {/* Right Sidebar - 15% */}
+      {/* Right Sidebar - 300px */}
       <div className="w-[300px] flex flex-col min-h-0 border-l border-border">
-        {/* Character + Ready Button */}
+        {/* Character + Ready + Dice Buttons */}
         <div className="p-3 border-b border-border">
           <div className="flex items-center gap-2 mb-2">
             <User className="w-4 h-4 text-primary" />
             <h3 className="font-semibold text-sm">Character</h3>
           </div>
           
-          <div className="flex gap-2">
+          <div className="flex gap-2 mb-2">
             <select
               value={selectedChar || ''}
               onChange={(e) => setSelectedChar(e.target.value ? Number(e.target.value) : null)}
@@ -337,6 +337,15 @@ export default function GameRoom() {
                 </option>
               ))}
             </select>
+            
+            <button
+              type="button"
+              onClick={() => setShowDice(!showDice)}
+              className={`p-2 rounded-lg transition-colors ${showDice ? 'bg-primary/20 text-primary' : 'bg-surfaceHover text-textMuted hover:text-text'}`}
+              title="Roll Dice"
+            >
+              <Dices className="w-4 h-4" />
+            </button>
             
             <button
               type="button"
@@ -363,6 +372,58 @@ export default function GameRoom() {
               {isReady ? 'Ready!' : 'Ready'}
             </button>
           </div>
+          
+          {/* Dice Roller */}
+          {showDice && (
+            <div className="bg-surfaceHover p-3 rounded-lg space-y-2">
+              <div className="flex gap-1 mb-2">
+                {[4, 6, 8, 10, 12, 20, 100].map(die => (
+                  <button
+                    key={die}
+                    onClick={() => setDiceInput(`1d${die}`)}
+                    className={`px-2 py-1 rounded text-xs ${
+                      diceInput === `1d${die}` ? 'bg-primary text-white' : 'bg-surface'
+                    }`}
+                  >
+                    d{die}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={diceInput}
+                  onChange={(e) => setDiceInput(e.target.value)}
+                  className="input text-sm w-20"
+                  placeholder="1d20"
+                />
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await api.post('/dice/roll', { expression: diceInput })
+                      setDiceResults([res.data, ...diceResults].slice(0, 5))
+                    } catch (err) {
+                      console.error('Failed to roll:', err)
+                    }
+                  }}
+                  className="btn-primary text-sm px-3"
+                >
+                  Roll
+                </button>
+              </div>
+              {diceResults.length > 0 && (
+                <div className="text-sm">
+                  <div className="text-xs text-textMuted mb-1">Last roll:</div>
+                  <div className="text-primary font-bold text-lg">
+                    {diceResults[0].result}
+                    {diceResults[0].modifier > 0 && `+${diceResults[0].modifier}`}
+                    {diceResults[0].modifier < 0 && `${diceResults[0].modifier}`}
+                    <span className="text-textMuted text-xs ml-2">({diceResults[0].rolls?.join(', ')})</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
         
         {/* Chat Header */}
