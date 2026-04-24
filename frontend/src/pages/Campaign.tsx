@@ -118,11 +118,14 @@ export default function Campaign() {
     }
     setError(null)
     try {
-      await api.post(`/campaigns/${id}/start-session`, { title: 'Session 1' })
-      setCampaign({ ...campaign!, status: 'in_progress' })
       const roomsRes = await api.get(`/rooms/campaign/${id}`)
       if (roomsRes.data.length > 0) {
-        navigate(`/campaign/${id}/room/${roomsRes.data[0].id}`)
+        const roomId = roomsRes.data[0].id
+        await api.post(`/sessions/create`, { room_id: roomId, title: 'Session 1' })
+        setCampaign({ ...campaign!, status: 'in_progress' })
+        navigate(`/campaign/${id}/room/${roomId}`)
+      } else {
+        setError('No room available. Create a room first.')
       }
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to start session')

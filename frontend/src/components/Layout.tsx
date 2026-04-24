@@ -14,8 +14,8 @@ export default function Layout() {
   const logout = useAuthStore(state => state.logout)
 
   return (
-    <div className="min-h-screen bg-background grid-bg">
-      <header className="glass sticky top-0 z-50 border-b border-border/50">
+    <div className="h-screen flex flex-col bg-background grid-bg overflow-hidden">
+      <header className="glass sticky top-0 z-50 border-b border-border/50 shrink-0">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-3 group">
             <div className="relative">
@@ -83,7 +83,7 @@ export default function Layout() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8">
+      <main className="flex-1 overflow-hidden p-0">
         <Outlet />
       </main>
     </div>

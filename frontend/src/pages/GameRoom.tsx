@@ -5,7 +5,7 @@ import { useAuthStore } from '../lib/store'
 import { 
   Send, Dices, User, MessageSquare, Sword, Shield, Zap, Users,
   ChevronDown, ChevronUp, Heart, Activity, Footprints, Sparkles,
-  RotateCcw, Volume2, VolumeX, MoreHorizontal
+  RotateCcw
 } from 'lucide-react'
 
 interface Message {
@@ -57,7 +57,6 @@ export default function GameRoom() {
   const [diceInput, setDiceInput] = useState('1d20')
   const [diceResults, setDiceResults] = useState<any[]>([])
   const [showDice, setShowDice] = useState(false)
-  const [showCharPanel, setShowCharPanel] = useState(true)
   const [showInitiative, setShowInitiative] = useState(false)
   const [chatMode, setChatMode] = useState<ChatMode>('action')
   const [error, setError] = useState<string | null>(null)
@@ -327,119 +326,226 @@ export default function GameRoom() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] bg-surface overflow-hidden">
-      {/* Map Area - 60% */}
-      {currentMap && (
-        <div className="w-[60%] border-r border-border relative overflow-hidden">
-          <div className="absolute inset-0 p-2">
-            <div 
-              className="w-full h-full relative rounded-lg overflow-hidden"
-              style={{ 
-                backgroundColor: '#1a1a2e',
-                backgroundImage: 'linear-gradient(#16213e 1px, transparent 1px), linear-gradient(90deg, #16213e 1px, transparent 1px)',
-                backgroundSize: '20px 20px'
-              }}
-            >
-              {/* Render map entities */}
-              {mapEntities.map((entity) => {
-                const getEntityColor = (type: string) => {
-                  if (type === 'player' || type === 'character') return 'bg-cyan-400'
-                  if (type === 'npc') return 'bg-purple-400'
-                  if (type === 'enemy' || type === 'monster') return 'bg-red-500'
-                  return 'bg-yellow-400'
-                }
-                return (
-                  <div
-                    key={entity.id}
-                    className={`absolute w-4 h-4 rounded-full ${getEntityColor(entity.entity_type)} border-2 border-white shadow-lg flex items-center justify-center`}
-                    style={{
-                      left: `${(entity.x / (currentMap.width || 50)) * 100}%`,
-                      top: `${(entity.y / (currentMap.height || 50)) * 100}%`,
-                      transform: 'translate(-50%, -50%)'
-                    }}
-                    title={entity.name}
-                  >
-                    <span className="text-[8px] text-white font-bold">
-                      {entity.name?.charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                )
-              })}
+    <div className="flex flex-1 min-h-0 bg-surface overflow-hidden">
+      {/* Map Area - 80% */}
+      <div className="flex-[4] border-r border-border relative overflow-hidden">
+        <div className="absolute inset-0 p-2">
+          <div 
+            className="w-full h-full relative rounded-lg overflow-hidden"
+            style={{ 
+              backgroundColor: '#0f0f1a',
+              backgroundImage: 'linear-gradient(#1e1e3f 1px, transparent 1px), linear-gradient(90deg, #1e1e3f 1px, transparent 1px)',
+              backgroundSize: '40px 40px'
+            }}
+          >
+            {/* Render rooms as boxes */}
+            {currentMap?.data?.rooms?.map((room: any, idx: number) => {
+              const left = (room.x / (currentMap?.width || 50)) * 100
+              const top = (room.y / (currentMap?.height || 50)) * 100
+              const width = (room.width / (currentMap?.width || 50)) * 100
+              const height = (room.height / (currentMap?.height || 50)) * 100
               
-              {/* Map name overlay */}
-              <div className="absolute top-2 left-2 bg-black/60 px-3 py-1 rounded text-white text-sm">
-                {currentMap.name || 'Dungeon Map'}
-              </div>
+              return (
+                <div
+                  key={idx}
+                  className="absolute border-2 border-purple-500/50 bg-purple-900/20 rounded flex items-center justify-center"
+                  style={{
+                    left: `${left}%`,
+                    top: `${top}%`,
+                    width: `${width}%`,
+                    height: `${height}%`
+                  }}
+                  title={room.name}
+                >
+                  <span className="text-xs text-purple-300 px-1 text-center">{room.name}</span>
+                </div>
+              )
+            })}
+            
+            {/* Render entities on map */}
+            {mapEntities.map((entity) => {
+              const getEntityColor = (type: string) => {
+                if (type === 'player' || type === 'character') return 'bg-cyan-400'
+                if (type === 'npc') return 'bg-purple-400'
+                if (type === 'enemy' || type === 'monster') return 'bg-red-500'
+                return 'bg-yellow-400'
+              }
+              return (
+                <div
+                  key={entity.id}
+                  className={`absolute w-5 h-5 rounded-full ${getEntityColor(entity.entity_type)} border-2 border-white shadow-lg flex items-center justify-center z-10`}
+                  style={{
+                    left: `${(entity.x / (currentMap?.width || 50)) * 100}%`,
+                    top: `${(entity.y / (currentMap?.height || 50)) * 100}%`,
+                    transform: 'translate(-50%, -50%)'
+                  }}
+                  title={entity.name}
+                >
+                  <span className="text-[8px] text-white font-bold">
+                    {entity.name?.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+              )
+            })}
+            
+            {/* Map name overlay */}
+            <div className="absolute top-2 left-2 bg-black/60 px-3 py-1 rounded text-white text-sm">
+              {currentMap?.name || 'No Map Loaded'}
             </div>
           </div>
+        </div>
+        
+        {/* Map controls */}
+        <div className="absolute top-2 right-2 flex gap-1">
+          <button className="p-2 bg-black/60 rounded hover:bg-black/80 text-white">
+            <span className="text-xs">+</span>
+          </button>
+          <button className="p-2 bg-black/60 rounded hover:bg-black/80 text-white">
+            <span className="text-xs">-</span>
+          </button>
+        </div>
+      </div>
+      
+      {/* Right Sidebar - 20% */}
+      <div className="flex-1 flex flex-col min-h-0 border-l border-border">
+        {/* Character + Ready Button */}
+        <div className="p-3 border-b border-border">
+          <div className="flex items-center gap-2 mb-2">
+            <User className="w-4 h-4 text-primary" />
+            <h3 className="font-semibold text-sm">Character</h3>
+          </div>
           
-          {/* Map controls */}
-          <div className="absolute top-2 right-2 flex gap-1">
-            <button className="p-2 bg-black/60 rounded hover:bg-black/80 text-white">
-              <span className="text-xs">+</span>
-            </button>
-            <button className="p-2 bg-black/60 rounded hover:bg-black/80 text-white">
-              <span className="text-xs">-</span>
+          <div className="flex gap-2">
+            <select
+              value={selectedChar || ''}
+              onChange={(e) => setSelectedChar(e.target.value ? Number(e.target.value) : null)}
+              className="flex-1 input text-sm"
+            >
+              <option value="">Select...</option>
+              {characters.map((char) => (
+                <option key={char.id} value={char.id}>
+                  {char.name}
+                </option>
+              ))}
+            </select>
+            
+            <button
+              type="button"
+              onClick={async () => {
+                if (selectedChar) {
+                  try {
+                    const res = await api.post(`/sessions/room/${roomId}/ready`, { character_id: selectedChar })
+                    setIsReady(!isReady)
+                    if (res.data.map_generated) {
+                      loadMap()
+                    }
+                  } catch (err) {
+                    console.error('Failed to toggle ready:', err)
+                  }
+                }
+              }}
+              className={`px-3 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex items-center gap-1 ${
+                isReady 
+                  ? 'bg-green-600 text-white' 
+                  : 'bg-surfaceHover text-yellow-400 hover:text-yellow-300'
+              }`}
+            >
+              <Shield className="w-4 h-4" />
+              {isReady ? 'Ready!' : 'Ready'}
             </button>
           </div>
         </div>
-      )}
-      
-      {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col">
+        
         {/* Chat Header */}
-        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="px-4 py-2 border-b border-border flex items-center justify-between">
+          <div className="flex items-center gap-2">
             <button 
               onClick={() => navigate(`/campaign/${campaignId}`)}
-              className="p-2 hover:bg-surfaceHover rounded-lg transition-colors"
+              className="p-1 hover:bg-surfaceHover rounded transition-colors"
             >
-              <ChevronDown className="w-4 h-4 rotate-90" />
+              <ChevronDown className="w-3 h-3 rotate-90" />
             </button>
-            <div>
-              <h2 className="font-display font-bold text-lg">Adventure</h2>
-              <p className="text-xs text-textMuted">
-                {messages.length} messages
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setMuted(!muted)}
-              className={`p-2 rounded-lg transition-colors ${muted ? 'bg-red-900/30 text-red-400' : 'hover:bg-surfaceHover'}`}
-            >
-              {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-            </button>
-            <button
-              onClick={() => setShowCharPanel(!showCharPanel)}
-              className={`p-2 rounded-lg transition-colors ${showCharPanel ? 'bg-primary/20 text-primary' : 'hover:bg-surfaceHover'}`}
-            >
-              <MoreHorizontal className="w-4 h-4" />
-            </button>
+            <h2 className="font-display font-bold text-sm">Chat</h2>
           </div>
         </div>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin">
+        {/* Messages - scrollable */}
+        <div className="flex-1 overflow-y-auto p-3 space-y-2 scrollbar-thin">
           {messages.length === 0 && (
-            <div className="text-center text-textMuted py-12">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface flex items-center justify-center">
-                <MessageSquare className="w-8 h-8 opacity-50" />
-              </div>
-              <p className="text-lg font-display">No messages yet</p>
-              <p className="text-sm mt-2">Start the adventure by sending a message!</p>
+            <div className="text-center text-textMuted py-8">
+              <p className="text-sm">No messages yet</p>
             </div>
           )}
           {messages.map((msg) => (
             <div 
               key={msg.id} 
-              className={`p-4 rounded-r-xl rounded-bl-xl ${getMessageStyle(msg)} message-enter`}
+              className={`p-3 rounded-lg text-sm ${getMessageStyle(msg)}`}
             >
-              <div className="flex items-center gap-2 text-xs text-textMuted mb-2">
+              <div className="flex items-center gap-1 text-xs text-textMuted mb-1">
                 {getMessageIcon(msg)}
                 <span className="font-medium">{getMessageLabel(msg)}</span>
                 {msg.character_id && (
                   <span className="text-primary">
+                    • {getCharacterById(msg.character_id)?.name || 'Unknown'}
+                  </span>
+                )}
+              </div>
+              <div 
+                className="message-content"
+                dangerouslySetInnerHTML={{ __html: formatMessage(msg.content) }}
+              />
+            </div>
+          ))}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Chat Input */}
+        <div className="p-3 border-t border-border space-y-2">
+          {/* Mode Tabs */}
+          <div className="flex items-center gap-1 overflow-x-auto">
+            {(['action', 'speak', 'party', 'dm'] as ChatMode[]).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setChatMode(mode)}
+                className={`px-2 py-1 rounded text-xs font-medium transition-all whitespace-nowrap ${
+                  chatMode === mode 
+                    ? 'bg-primary text-white' 
+                    : 'bg-surfaceHover text-textMuted hover:text-text'
+                }`}
+              >
+                {mode.charAt(0).toUpperCase() + mode.slice(1)}
+              </button>
+            ))}
+          </div>
+          
+          {/* Input Field */}
+          <form onSubmit={sendMessage} className="flex gap-2">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder={
+                chatMode === 'action' ? "What do you do?" :
+                chatMode === 'speak' ? 'Say something...' :
+                chatMode === 'party' ? 'Whisper to party...' :
+                'Talk to the DM...'
+              }
+              className="flex-1 input text-sm"
+              disabled={loading}
+            />
+            <button 
+              type="submit" 
+              className="btn-primary px-3 disabled:opacity-50"
+              disabled={loading}
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  )
                     • {getCharacterById(msg.character_id)?.name || 'Unknown'}
                   </span>
                 )}
@@ -465,96 +571,10 @@ export default function GameRoom() {
           )}
           <div ref={messagesEndRef} />
         </div>
-
-        {/* Chat Input */}
-        <div className="p-4 border-t border-border space-y-3">
-          {/* Mode Tabs */}
-          <div className="flex items-center gap-2 overflow-x-auto">
-            {(['action', 'speak', 'party', 'dm'] as ChatMode[]).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setChatMode(mode)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
-                  chatMode === mode 
-                    ? 'bg-primary text-white glow-purple' 
-                    : 'bg-surfaceHover text-textMuted hover:text-text'
-                }`}
-              >
-                {mode === 'action' && <Sword className="w-3 h-3 inline mr-1" />}
-                {mode === 'speak' && <MessageSquare className="w-3 h-3 inline mr-1" />}
-                {mode === 'party' && <Users className="w-3 h-3 inline mr-1" />}
-                {mode === 'dm' && <Sparkles className="w-3 h-3 inline mr-1" />}
-                {mode.charAt(0).toUpperCase() + mode.slice(1)}
-              </button>
-            ))}
-            <div className="flex-1" />
-            <button
-              type="button"
-              onClick={async () => {
-                if (selectedChar) {
-                  try {
-                    await api.post(`/sessions/room/${roomId}/ready`, { character_id: selectedChar })
-                    setIsReady(!isReady)
-                  } catch (err) {
-                    console.error('Failed to toggle ready:', err)
-                  }
-                }
-              }}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex items-center gap-2 ${
-                isReady 
-                  ? 'bg-green-600 text-white glow-green' 
-                  : 'bg-surfaceHover text-yellow-400 hover:text-yellow-300'
-              }`}
-            >
-              <Shield className="w-4 h-4" />
-              {isReady ? 'Ready!' : 'Ready Up'}
-            </button>
-          </div>
-          
-          {/* Input Field */}
-          <form onSubmit={sendMessage} className="flex gap-2">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder={
-                chatMode === 'action' ? "What do you do?" :
-                chatMode === 'speak' ? 'Say something...' :
-                chatMode === 'party' ? 'Whisper to party...' :
-                'Talk to the DM...'
-              }
-              className="flex-1 input"
-              disabled={loading}
-            />
-            <button 
-              type="submit" 
-              className="btn-primary px-4 disabled:opacity-50"
-              disabled={loading}
-            >
-              <Send className="w-5 h-5" />
-            </button>
-          </form>
-        </div>
       </div>
-
-      {/* Sidebar */}
-      {showCharPanel && (
-        <div className="w-80 border-l border-border flex flex-col overflow-hidden">
-          {/* Character Panel */}
-          <div className="p-4 border-b border-border">
-            <div className="flex items-center gap-2 mb-3">
-              <User className="w-4 h-4 text-primary" />
-              <h3 className="font-semibold">Character</h3>
-            </div>
-            
-            <select
-              value={selectedChar || ''}
-              onChange={(e) => setSelectedChar(e.target.value ? Number(e.target.value) : null)}
-              className="w-full input mb-3"
-            >
-              <option value="">Select character</option>
-              {characters.map((char) => (
+    </div>
+  )
+}
                 <option key={char.id} value={char.id}>
                   {char.name} (L{char.level} {char.race} {char.class_name})
                 </option>

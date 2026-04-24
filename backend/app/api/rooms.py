@@ -30,9 +30,23 @@ class RoomResponse(BaseModel):
     name: str
     join_code: str
     is_active: bool
+    map_id: Optional[int] = None
 
     class Config:
         from_attributes = True
+
+
+@router.get("/{room_id}")
+async def get_room(
+    room_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Room).where(Room.id == room_id))
+    room = result.scalar_one_or_none()
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    return room
 
 
 class MessageCreate(BaseModel):

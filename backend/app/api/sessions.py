@@ -84,6 +84,27 @@ async def create_session(
     await db.commit()
     await db.refresh(db_session)
     
+    map_data = map_generator.generate(
+        map_type="dungeon",
+        theme="standard",
+        width=50,
+        height=50,
+        difficulty="medium"
+    )
+    
+    db_map = CampaignMap(
+        campaign_id=room.campaign_id,
+        name=f"Session {new_number} Map",
+        seed=str(db_session.id),
+        width=50,
+        height=50,
+        data=map_data
+    )
+    db.add(db_map)
+    await db.commit()
+    await db.refresh(db_map)
+    
+    room.map_id = db_map.id
     room.is_active_session = True
     await db.commit()
     
@@ -280,9 +301,56 @@ async def toggle_ready(
     await db.commit()
     await db.refresh(ready_record)
     
+    room_result = await db.execute(select(Room).where(Room.id == room_id))
+    room = room_result.scalar_one_or_none()
+    
+    chars_result = await db.execute(
+        select(Character).where(Character.campaign_id == room.campaign_id)
+    )
+    characters = list(chars_result.scalars().all())
+    
+    ready_result = await db.execute(
+        select(PlayerReady).where(
+            PlayerReady.room_id == room_id,
+            PlayerReady.is_ready == True
+        )
+    )
+    ready_states = list(ready_result.scalars().all())
+    
+    all_ready = len(characters) > 0 and len(ready_states) >= len(characters)
+    
+    map_generated = False
+    if all_ready and room and not room.map_id:
+        map_data = map_generator.generate(
+            map_type="dungeon",
+            theme="standard",
+            width=50,
+            height=50,
+            difficulty="medium"
+        )
+        
+        db_map = CampaignMap(
+            campaign_id=room.campaign_id,
+            name="Adventure Map",
+            seed=str(room_id),
+            width=50,
+            height=50,
+            data=map_data
+        )
+        db.add(db_map)
+        await db.commit()
+        await db.refresh(db_map)
+        
+        room.map_id = db_map.id
+        room.is_active_session = True
+        await db.commit()
+        map_generated = True
+    
     return {
         "character_id": request.character_id,
-        "is_ready": ready_record.is_ready
+        "is_ready": ready_record.is_ready,
+        "all_ready": all_ready,
+        "map_generated": map_generated
     }
 
 
