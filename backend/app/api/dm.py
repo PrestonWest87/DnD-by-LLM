@@ -102,7 +102,7 @@ async def dm_chat(
     if campaign.dm_mode == "human":
         raise HTTPException(status_code=403, detail="This campaign is in human DM mode. Wait for the human DM to respond.")
 
-    character = None
+    # If character_id is provided, verify ownership
     if request.character_id:
         result = await db.execute(select(Character).where(Character.id == request.character_id))
         character = result.scalar_one_or_none()

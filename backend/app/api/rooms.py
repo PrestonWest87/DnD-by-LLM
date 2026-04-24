@@ -1,9 +1,10 @@
 import secrets
 import string
-from typing import List, Optional
+from typing import List, Optional, Union
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -46,7 +47,13 @@ class MessageResponse(BaseModel):
     character_id: Optional[int]
     content: str
     message_type: str
-    timestamp: str
+    timestamp: Union[str, datetime]
+
+    @field_serializer('timestamp')
+    def serialize_timestamp(self, value: datetime) -> str:
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return str(value)
 
     class Config:
         from_attributes = True
