@@ -114,20 +114,31 @@ async def dm_chat(
         select(ChatMessage)
         .where(ChatMessage.room_id == request.room_id)
         .order_by(ChatMessage.timestamp.desc())
-        .limit(20)
+        .limit(30)
     )
     recent_messages = list(reversed(context_messages.scalars().all()))
 
+    # Get or create session for this room
     session_result = await db.execute(
         select(Session)
-        .where(Session.campaign_id == room.campaign_id)
+        .where(Session.room_id == request.room_id)
         .order_by(desc(Session.number))
     )
     sessions = session_result.scalars().all()
     current_session = sessions[0] if sessions else None
     
     if not current_session and campaign.dm_mode == "ai":
-        current_session = Session(campaign_id=room.campaign_id, number=1, title="Session 1")
+        num_result = await db.execute(
+            select(Session).where(Session.room_id == request.room_id).order_by(desc(Session.number))
+        )
+        last_session = num_result.scalar_one_or_none()
+        session_num = (last_session.number + 1) if last_session else 1
+        current_session = Session(
+            campaign_id=room.campaign_id,
+            room_id=request.room_id,
+            number=session_num,
+            title=f"Session {session_num}"
+        )
         db.add(current_session)
         await db.commit()
         await db.refresh(current_session)
@@ -142,27 +153,41 @@ async def dm_chat(
             if s.summary:
                 story_context += f"- Session {s.number}: {s.summary}\n"
 
+    # Get ALL characters in this room for context
+    room_chars = await db.execute(
+        select(Character).where(Character.campaign_id == room.campaign_id)
+    )
+    all_characters = room_chars.scalars().all()
+    
     character_context = ""
+    if all_characters:
+        character_context = "Party Members:\n"
+        for char in all_characters:
+            stats_str = json.dumps(char.stats) if isinstance(char.stats, dict) else str(char.stats)
+            char_name = f"{char.name} ({char.race} {char.class_name})"
+            if char.id == request.character_id:
+                char_name += " [YOU]"
+            character_context += f"- {char_name} L{char.level} HP:{char.hp}/{char.max_hp} AC:{char.ac} Stats:{stats_str}\n"
+    
     if character:
-        stats_str = json.dumps(character.stats) if isinstance(character.stats, dict) else str(character.stats)
-        character_context = f"Playing as: {character.name} (Level {character.level} {character.race} {character.class_name})\nHP: {character.hp}/{character.max_hp} | AC: {character.ac}\nStats: {stats_str}\n"
+        character_context += f"\nYour character: {character.name}\nHP: {character.hp}/{character.max_hp} | AC: {character.ac}\n"
 
     messages_history = "\n".join([
-        f"{m.message_type}: {m.content}" for m in recent_messages[-8:]
+        f"{m.character_id}: {m.content[:150]}" for m in recent_messages[-10:]
     ])
 
-    system_prompt = f"""You are a D&D Dungeon Master. Continue the story naturally, advance the plot.
+    system_prompt = f"""You are a D&D Dungeon Master.
 
 STORY CONTEXT:
 {story_context}
 
-CHARACTER:
+PARTY:
 {character_context}
 
-RECENT CONVERSATION:
+RECENT CONVERSATION (last 10 messages):
 {messages_history}
 
-Continue the adventure. Describe what happens as a result of the player's action. Advance the story, introduce new challenges or developments."""
+The player input below is from one of your players. Consider all party members when responding. Advance the adventure for everyone."""
 
     response_chunks = await ollama_client.chat_stream(
         messages=[

@@ -167,6 +167,7 @@ class Session(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     campaign_id = Column(Integer, ForeignKey("campaigns.id"), nullable=False)
+    room_id = Column(Integer, ForeignKey("rooms.id"), nullable=True)
     number = Column(Integer, nullable=False)
     title = Column(String(200))
     summary = Column(Text)

@@ -270,7 +270,7 @@ async def create_character_with_rolls(
         equipment=equipment,
         inventory=[],
         stat_rolls=stat_rolls if stat_rolls else [roll_stats_4d6_drop_lowest() for _ in range(6)],
-        stat_roll_count=1 if not use_standard_array and not rolled_stats else 0,
+        stat_roll_count=1 if not use_standard_array and not stat_rolls else 0,
         personality=personality,
         backstory=backstory
     )

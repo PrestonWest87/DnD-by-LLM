@@ -282,7 +282,8 @@ async def update_campaign_document(
 @router.post("/{campaign_id}/start-session")
 async def start_session(
     campaign_id: int,
-    title: str = "Session 1",
+    room_id: int = None,
+    title: str = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -292,19 +293,30 @@ async def start_session(
         campaign = campaign.scalar_one_or_none()
         if not campaign:
             raise HTTPException(status_code=404, detail="Campaign not found")
-        if campaign.owner_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Only the campaign owner can start a session")
         
-        result = await db.execute(
-            select(Session).where(Session.campaign_id == campaign_id).order_by(desc(Session.number)).limit(1)
+        # Check if user is a campaign member
+        member = await db.execute(
+            select(CampaignMember).where(
+                CampaignMember.campaign_id == campaign_id,
+                CampaignMember.user_id == current_user.id
+            )
         )
+        if not member.scalar_one_or_none() and campaign.owner_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Only campaign members can start sessions")
+        
+        # Get highest session number for this room
+        query = select(Session).where(Session.room_id == room_id) if room_id else select(Session).where(Session.campaign_id == campaign_id)
+        result = await db.execute(query.order_by(desc(Session.number)).limit(1))
         last_session = result.scalar_one_or_none()
         session_number = (last_session.number + 1) if last_session else 1
         
+        session_title = title if title else f"Session {session_number}"
+        
         new_session = Session(
             campaign_id=campaign_id,
+            room_id=room_id,
             number=session_number,
-            title=title
+            title=session_title
         )
         db.add(new_session)
         await db.commit()
