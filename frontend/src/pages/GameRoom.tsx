@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import api from '../lib/api'
-import { useGameStore } from '../lib/store'
-import { Send, Dices, User, Map, Settings, X } from 'lucide-react'
+import { Send, Dices, User, Map, Settings, X, MessageSquare, Me } from 'lucide-react'
 
 interface Message {
   id: number
@@ -12,6 +11,136 @@ interface Message {
   message_type: string
   timestamp: string
 }
+
+interface Character {
+  id: number
+  name: string
+  race: string
+  class_name: string
+  level: number
+  hp: number
+  max_hp: number
+  ac: number
+  stats: Record<string, number>
+}
+
+export default function GameRoom() {
+  const { id, roomId } = useParams()
+  const navigate = useNavigate()
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const [messages, setMessages] = useState<Message[]>([])
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [characters, setCharacters] = useState<Character[]>([])
+  const [selectedChar, setSelectedChar] = useState<number | null>(null)
+  const [showDice, setShowDice] = useState(false)
+  const [diceInput, setDiceInput] = useState('1d20')
+  const [diceResults, setDiceResults] = useState<any[]>([])
+  const [showMap, setShowMap] = useState(false)
+  const [maps, setMaps] = useState<any[]>([])
+  const [mapError, setMapError] = useState<string | null>(null)
+  const [chatMode, setChatMode] = useState<'action' | 'speak' | 'party' | 'dm'>('action')
+
+  useEffect(() => {
+    loadMessages()
+    loadCharacters()
+    loadMaps()
+    const interval = setInterval(loadMessages, 3000)
+    return () => clearInterval(interval)
+  }, [roomId])
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  const loadMessages = async () => {
+    try {
+      const response = await api.get(`/rooms/${roomId}/messages`)
+      const newMessages = response.data.reverse()
+      if (newMessages.length !== messages.length) {
+        setMessages(newMessages)
+      }
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const loadCharacters = async () => {
+    try {
+      const response = await api.get(`/characters/campaign/${id}`)
+      setCharacters(response.data)
+      if (response.data.length > 0 && !selectedChar) {
+        setSelectedChar(response.data[0].id)
+      }
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const loadMaps = async () => {
+    try {
+      const response = await api.get(`/maps/campaign/${id}`)
+      setMaps(response.data)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const getMessageType = () => {
+    switch (chatMode) {
+      case 'speak': return 'speak'
+      case 'party': return 'party'
+      case 'action': return 'action'
+      default: return 'player'
+    }
+  }
+
+  const sendMessage = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!input.trim()) return
+
+    const userMessage: Message = {
+      id: Date.now(),
+      user_id: 0,
+      character_id: selectedChar || undefined,
+      content: input,
+      message_type: getMessageType(),
+      timestamp: new Date().toISOString()
+    }
+    setMessages([...messages, userMessage])
+    setLoading(true)
+
+    try {
+      let response
+      if (chatMode === 'dm') {
+        response = await api.post(`/dm/chat`, {
+          room_id: roomId,
+          player_input: input,
+          character_id: selectedChar
+        })
+        
+        const dmMessage: Message = {
+          id: Date.now() + 1,
+          user_id: 0,
+          content: response.data.response,
+          message_type: 'dm',
+          timestamp: new Date().toISOString()
+        }
+        setMessages(prev => [...prev, userMessage, dmMessage])
+      } else {
+        await api.post(`/rooms/${roomId}/messages`, {
+          content: input,
+          message_type: getMessageType(),
+          character_id: selectedChar
+        })
+      }
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setInput('')
+      setLoading(false)
+    }
+  }
 
 interface Character {
   id: number
@@ -61,13 +190,17 @@ export default function GameRoom() {
     }
   }
 
-  const loadCharacters = async () => {
+const loadCharacters = async () => {
     try {
       const response = await api.get(`/characters/campaign/${id}`)
       setCharacters(response.data)
+      if (response.data.length > 0 && !selectedChar) {
+        setSelectedChar(response.data[0].id)
+      }
     } catch (err) {
       console.error(err)
     }
+  }
   }
 
   const loadMaps = async () => {
@@ -207,12 +340,42 @@ export default function GameRoom() {
         </div>
 
         <div className="p-4 border-t border-border">
+          <div className="flex gap-2 mb-2">
+            <button
+              type="button"
+              onClick={() => setChatMode('action')}
+              className={`px-3 py-1 rounded text-sm ${chatMode === 'action' ? 'bg-primary text-white' : 'bg-surfaceHover'}`}
+            >
+              Action
+            </button>
+            <button
+              type="button"
+              onClick={() => setChatMode('speak')}
+              className={`px-3 py-1 rounded text-sm ${chatMode === 'speak' ? 'bg-primary text-white' : 'bg-surfaceHover'}`}
+            >
+              Speak
+            </button>
+            <button
+              type="button"
+              onClick={() => setChatMode('party')}
+              className={`px-3 py-1 rounded text-sm ${chatMode === 'party' ? 'bg-primary text-white' : 'bg-surfaceHover'}`}
+            >
+              Party
+            </button>
+            <button
+              type="button"
+              onClick={() => setChatMode('dm')}
+              className={`px-3 py-1 rounded text-sm ${chatMode === 'dm' ? 'bg-primary text-white' : 'bg-surfaceHover'}`}
+            >
+              DM
+            </button>
+          </div>
           <form onSubmit={sendMessage} className="flex gap-2">
             <input
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="What do you do?"
+              placeholder={chatMode === 'action' ? "What do you do?" : chatMode === 'speak' ? "Say something..." : chatMode === 'party' ? "Whisper to party..." : "Talk to the DM..."}
               className="input flex-1"
               disabled={loading}
             />
