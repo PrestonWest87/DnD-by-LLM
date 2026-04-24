@@ -1,6 +1,6 @@
 import { Outlet, Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
-import { LogOut, Sword, Map, Users, Shield, User } from 'lucide-react'
+import { LogOut, Sword, Map, Users, Shield, User, Sparkles } from 'lucide-react'
 
 export default function Layout() {
   const { user, profile } = useAuthStore()
@@ -14,45 +14,65 @@ export default function Layout() {
   const logout = useAuthStore(state => state.logout)
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="glass sticky top-0 z-50">
+    <div className="min-h-screen bg-background grid-bg">
+      <header className="glass sticky top-0 z-50 border-b border-border/50">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-3">
-            <Sword className="w-8 h-8 text-primary" />
-            <span className="font-display text-xl font-bold">DragonForge</span>
+          <Link to="/" className="flex items-center gap-3 group">
+            <div className="relative">
+              <Sword className="w-8 h-8 text-primary transition-transform group-hover:rotate-12" />
+              <Sparkles className="w-3 h-3 absolute -top-1 -right-1 text-accent animate-pulse" />
+            </div>
+            <span className="font-display text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+              DragonForge
+            </span>
           </Link>
 
           <nav className="flex items-center gap-6">
-            <Link to="/" className="flex items-center gap-2 text-textMuted hover:text-text transition-colors">
+            <Link 
+              to="/" 
+              className="flex items-center gap-2 text-textMuted hover:text-text transition-colors hover:scale-105"
+            >
               <Map className="w-4 h-4" />
               <span>Campaigns</span>
             </Link>
+            <Link 
+              to="/character/create/0"
+              className="flex items-center gap-2 text-textMuted hover:text-text transition-colors hover:scale-105"
+            >
+              <Users className="w-4 h-4" />
+              <span>Create</span>
+            </Link>
             {user?.is_admin && (
-              <Link to="/admin" className="flex items-center gap-2 text-textMuted hover:text-text transition-colors">
+              <Link 
+                to="/admin" 
+                className="flex items-center gap-2 text-textMuted hover:text-danger transition-colors hover:scale-105"
+              >
                 <Shield className="w-4 h-4" />
                 <span>Admin</span>
               </Link>
             )}
             {user && (
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4 border-l border-border pl-4">
                 <Link
                   to="/profile"
-                  className="flex items-center gap-2 text-textMuted hover:text-text transition-colors"
+                  className="flex items-center gap-3 text-textMuted hover:text-text transition-all hover:scale-105"
                 >
                   {profile?.avatar_url ? (
                     <img
                       src={profile.avatar_url}
                       alt={profile.display_name || user.username}
-                      className="w-8 h-8 rounded-full object-cover"
+                      className="w-8 h-8 rounded-full object-cover ring-2 ring-border"
                     />
                   ) : (
-                    <User className="w-4 h-4" />
+                    <div className="w-8 h-8 rounded-full bg-surface flex items-center justify-center ring-2 ring-border">
+                      <User className="w-4 h-4 text-primary" />
+                    </div>
                   )}
-                  <span>{profile?.display_name || user.username}</span>
+                  <span className="hidden md:inline">{profile?.display_name || user.username}</span>
                 </Link>
                 <button
                   onClick={handleLogout}
-                  className="flex items-center gap-2 text-textMuted hover:text-danger transition-colors"
+                  className="flex items-center gap-2 text-textMuted hover:text-danger transition-all hover:scale-105"
                   title="Logout"
                 >
                   <LogOut className="w-4 h-4" />

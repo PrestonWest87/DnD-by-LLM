@@ -8,7 +8,7 @@ import bcrypt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api import auth, campaigns, rooms, characters, dice, dm, map_routes, admin, models, profile, settings, rag
+from app.api import auth, campaigns, rooms, characters, dice, dm, map_routes, admin, models, profile, settings, rag, encounters, sessions
 from app.db.database import init_db, async_session_maker, User
 
 
@@ -75,6 +75,8 @@ app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 app.include_router(models.router, prefix="/api/models", tags=["models"])
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(rag.router, prefix="/api/rag", tags=["rag"])
+app.include_router(encounters.router, prefix="/api/encounters", tags=["encounters"])
+app.include_router(sessions.router, prefix="/api/sessions", tags=["sessions"])
 
 
 @app.get("/api/health")

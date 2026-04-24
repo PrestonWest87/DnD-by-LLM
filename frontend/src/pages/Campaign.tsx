@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import api from '../lib/api'
-import { Users, Crown, Map, Plus, Play, Settings, Copy, BookOpen, Bot, User } from 'lucide-react'
+import { useAuthStore } from '../lib/store'
+import { Users, Crown, Map, Plus, Play, Settings, Copy, BookOpen } from 'lucide-react'
 
 interface Campaign {
   id: number
@@ -12,6 +13,7 @@ interface Campaign {
   story_outline: string
   dm_mode: string
   llm_model: string
+  status?: string
 }
 
 interface Member {
@@ -32,6 +34,7 @@ interface Character {
 export default function Campaign() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuthStore()
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [members, setMembers] = useState<Member[]>([])
   const [characters, setCharacters] = useState<Character[]>([])
@@ -115,7 +118,7 @@ export default function Campaign() {
     }
     setError(null)
     try {
-      const res = await api.post(`/campaigns/${id}/start-session`, { title: 'Session 1' })
+      await api.post(`/campaigns/${id}/start-session`, { title: 'Session 1' })
       setCampaign({ ...campaign!, status: 'in_progress' })
       const roomsRes = await api.get(`/rooms/campaign/${id}`)
       if (roomsRes.data.length > 0) {
@@ -291,12 +294,14 @@ export default function Campaign() {
               <Settings className="w-5 h-5 text-primary" />
               <h2 className="font-display text-xl font-semibold">Campaign Settings</h2>
             </div>
-            <button onClick={() => setShowSettings(!showSettings)} className="btn-secondary text-sm">
-              {showSettings ? 'Hide' : 'Edit'}
-            </button>
+            {user?.id === campaign?.owner_id && (
+              <button onClick={() => setShowSettings(!showSettings)} className="btn-secondary text-sm">
+                {showSettings ? 'Hide' : 'Edit'}
+              </button>
+            )}
           </div>
           
-          {showSettings && (
+          {showSettings && user?.id === campaign?.owner_id && (
             <div className="space-y-4">
               <div className="space-y-2">
                 <label className="text-sm text-textMuted">DM Mode</label>
@@ -341,22 +346,33 @@ export default function Campaign() {
           <div className="flex items-center gap-2 mb-4">
             <Settings className="w-5 h-5 text-primary" />
             <h2 className="font-display text-xl font-semibold">Story Outline</h2>
-          </div>
-        {campaign.story_outline ? (
-          <div className="prose prose-invert max-w-none">
-            <p className="whitespace-pre-wrap">{campaign.story_outline}</p>
-            {campaign.status !== 'in_progress' && (
-              <button onClick={startSession} className="btn-primary mt-4">
-                Start Session
-              </button>
+            {user?.id === campaign?.owner_id && (
+              <span className="text-xs text-yellow-400 ml-2">(DM Only)</span>
             )}
           </div>
+        {user?.id === campaign?.owner_id ? (
+          <>
+            {campaign.story_outline ? (
+              <div className="prose prose-invert max-w-none">
+                <p className="whitespace-pre-wrap">{campaign.story_outline}</p>
+                {campaign.status !== 'in_progress' && (
+                  <button onClick={startSession} className="btn-primary mt-4">
+                    Start Session
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-textMuted mb-4">No story outline yet</p>
+                <button onClick={generateStoryOutline} className="btn-primary">
+                  Generate Story Outline
+                </button>
+              </div>
+            )}
+          </>
         ) : (
-          <div className="text-center py-8">
-            <p className="text-textMuted mb-4">No story outline yet</p>
-            <button onClick={generateStoryOutline} className="btn-primary">
-              Generate Story Outline
-            </button>
+          <div className="text-center py-8 text-textMuted">
+            <p>Only the DM can view the story outline.</p>
           </div>
         )}
       </div>

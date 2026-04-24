@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
+import api from '../lib/api'
 import { User, Save, LogOut } from 'lucide-react'
 
 interface Profile {
@@ -14,7 +15,6 @@ interface Profile {
 export default function Profile() {
   const navigate = useNavigate()
   const { user, logout } = useAuthStore()
-  const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -36,7 +36,7 @@ export default function Profile() {
       })
       if (response.ok) {
         const data = await response.json()
-        setProfile(data)
+        setProfileState(data)
         setFormData({
           display_name: data.display_name || '',
           avatar_url: data.avatar_url || '',
@@ -47,6 +47,21 @@ export default function Profile() {
       console.error('Failed to fetch profile:', err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const saveProfile = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSaving(true)
+    setError('')
+    setSuccess('')
+    try {
+      await api.patch('/profile', formData)
+      setSuccess('Profile updated successfully!')
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to update profile')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -69,7 +84,7 @@ export default function Profile() {
 
       if (response.ok) {
         const data = await response.json()
-        setProfile(data)
+        setProfileState(data)
         setSuccess('Profile updated successfully!')
       } else {
         const data = await response.json()

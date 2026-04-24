@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import api from '../lib/api'
-import { ArrowLeft, Plus, Settings, Eye, EyeOff } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff } from 'lucide-react'
 
 interface MapCell {
   terrain: string
@@ -16,8 +16,12 @@ interface MapData {
   width: number
   height: number
   data: {
+    width: number
+    height: number
     grid: MapCell[][]
     rooms: any[]
+    type: string
+    theme: string
   }
   explored_cells: Record<string, boolean>
 }
@@ -38,7 +42,7 @@ const TERRAIN_COLORS: Record<string, string> = {
 }
 
 export default function MapEditor() {
-  const { id, mapId } = useParams()
+  const { mapId } = useParams()
   const navigate = useNavigate()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [map, setMap] = useState<MapData | null>(null)
@@ -74,14 +78,17 @@ export default function MapEditor() {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    canvas.width = map.data.width * cellSize
-    canvas.height = map.data.height * cellSize
+    const mapWidth = map.data.width || map.width
+    const mapHeight = map.data.height || map.height
+
+    canvas.width = mapWidth * cellSize
+    canvas.height = mapHeight * cellSize
 
     ctx.fillStyle = '#0a0a0f'
     ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-    for (let y = 0; y < map.data.height; y++) {
-      for (let x = 0; x < map.data.width; x++) {
+    for (let y = 0; y < mapHeight; y++) {
+      for (let x = 0; x < mapWidth; x++) {
         const cell = map.data.grid[y]?.[x]
         if (cell) {
           ctx.fillStyle = TERRAIN_COLORS[cell.terrain] || '#1a1a25'
@@ -98,13 +105,13 @@ export default function MapEditor() {
     }
 
     ctx.strokeStyle = '#2a2a3a'
-    for (let x = 0; x <= map.data.width; x++) {
+    for (let x = 0; x <= mapWidth; x++) {
       ctx.beginPath()
       ctx.moveTo(x * cellSize, 0)
       ctx.lineTo(x * cellSize, canvas.height)
       ctx.stroke()
     }
-    for (let y = 0; y <= map.data.height; y++) {
+    for (let y = 0; y <= mapHeight; y++) {
       ctx.beginPath()
       ctx.moveTo(0, y * cellSize)
       ctx.lineTo(canvas.width, y * cellSize)

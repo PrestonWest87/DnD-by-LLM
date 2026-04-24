@@ -176,18 +176,51 @@ async def dm_chat(
         f"{m.character_id}: {m.content[:150]}" for m in recent_messages[-10:]
     ])
 
+    session_summary = ""
+    if current_session and current_session.running_summary:
+        session_summary = f"SESSION_SUMMARY (continuously updated):\n{current_session.running_summary}\n"
+
+    # Generate summary suggestion from recent messages
+    summary_suggestion = ""
+    if len(recent_messages) >= 5:
+        msg_text = " ".join([m.content[:100] for m in recent_messages[-5:]])
+        summary_suggestion = f"After responding, update the session summary with a brief sentence about what occurred in this interaction."
+
+    player_characters_in_room = [c for c in all_characters if c.user_id == current_user.id]
+    npc_characters = [c for c in all_characters if c.user_id != current_user.id]
+    
+    player_char_names = ", ".join([f"{c.name} (owned by {current_user.username})" for c in player_characters_in_room]) if player_characters_in_room else "None"
+    npc_names = ", ".join([c.name for c in npc_characters]) if npc_characters else "None"
+
     system_prompt = f"""You are a D&D Dungeon Master.
+
+CRITICAL RULES:
+1. NEVER speak or act as player characters - they are controlled by real players
+2. Only speak for NPCs and the environment
+3. If a player says their character does something, acknowledge it but don't narrate their thoughts/intentions
+4. When describing results, focus on what happens in the world, not what the player character thinks
+5. After EVERY response, provide a 1-sentence SESSION_UPDATE about what occurred in your response
+
+{session_summary}
+
+PLAYER CHARACTERS (REAL PLAYERS - DO NOT SPEAK AS THESE):
+{player_char_names}
+
+NPCs (YOU CAN CONTROL):
+{npc_names}
 
 STORY CONTEXT:
 {story_context}
 
-PARTY:
+ PARTY:
 {character_context}
 
 RECENT CONVERSATION (last 10 messages):
 {messages_history}
 
-The player input below is from one of your players. Consider all party members when responding. Advance the adventure for everyone."""
+The player input below is from one of your players. Consider all party members when responding. Advance the adventure for everyone. But remember - you are the DM narrating the world, not the players themselves.
+
+{summary_suggestion}"""
 
     response_chunks = await ollama_client.chat_stream(
         messages=[
@@ -209,7 +242,7 @@ The player input below is from one of your players. Consider all party members w
             messages=[{"role": "user", "content": summary_prompt}],
             model=os.getenv("OLLAMA_MODEL", "llama3.2:3b")
         )
-        current_session.summary = summary_resp
+        current_session.running_summary = summary_resp
         await db.commit()
 
     return {"response": response}

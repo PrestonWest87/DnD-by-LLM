@@ -327,3 +327,57 @@ async def start_session(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+
+@router.delete("/{campaign_id}")
+async def delete_campaign(
+    campaign_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    from app.db.database import Room, Session as DBSession, ChatMessage, CampaignMap, MapEntity, CampaignEmbedding, CampaignDocument, CampaignMember
+    
+    result = await db.execute(select(Campaign).where(Campaign.id == campaign_id))
+    campaign = result.scalar_one_or_none()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    
+    if campaign.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the campaign owner can delete this campaign")
+    
+    rooms_result = await db.execute(select(Room).where(Room.campaign_id == campaign_id))
+    rooms = rooms_result.scalars().all()
+    
+    for room in rooms:
+        msgs_result = await db.execute(select(ChatMessage).where(ChatMessage.room_id == room.id))
+        for msg in msgs_result.scalars().all():
+            await db.delete(msg)
+        
+        sessions_result = await db.execute(select(DBSession).where(DBSession.room_id == room.id))
+        for session in sessions_result.scalars().all():
+            embeds_result = await db.execute(select(CampaignEmbedding).where(CampaignEmbedding.session_id == session.id))
+            for emb in embeds_result.scalars().all():
+                await db.delete(emb)
+            await db.delete(session)
+        
+        await db.delete(room)
+    
+    maps_result = await db.execute(select(CampaignMap).where(CampaignMap.campaign_id == campaign_id))
+    for campaign_map in maps_result.scalars().all():
+        entities_result = await db.execute(select(MapEntity).where(MapEntity.map_id == campaign_map.id))
+        for entity in entities_result.scalars().all():
+            await db.delete(entity)
+        await db.delete(campaign_map)
+    
+    members_result = await db.execute(select(CampaignMember).where(CampaignMember.campaign_id == campaign_id))
+    for member in members_result.scalars().all():
+        await db.delete(member)
+    
+    docs_result = await db.execute(select(CampaignDocument).where(CampaignDocument.campaign_id == campaign_id))
+    for doc in docs_result.scalars().all():
+        await db.delete(doc)
+    
+    await db.delete(campaign)
+    await db.commit()
+    
+    return {"message": "Campaign deleted successfully"}

@@ -85,6 +85,9 @@ class Campaign(Base):
     llm_top_p = Column(Float, default=0.9)
     dm_personality = Column(Text)
     dm_mode = Column(String(20), default="ai")
+    notes = Column(Text)
+    session_summary = Column(Text)
+    last_session_id = Column(Integer)
 
 
 class CampaignMember(Base):
@@ -159,6 +162,8 @@ class Room(Base):
     join_code = Column(String(10), unique=True, nullable=False)
     is_active = Column(Boolean, default=True)
     dm_mode = Column(String(20))
+    map_id = Column(Integer, ForeignKey("campaign_maps.id"))
+    is_active_session = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -171,7 +176,9 @@ class Session(Base):
     number = Column(Integer, nullable=False)
     title = Column(String(200))
     summary = Column(Text)
+    running_summary = Column(Text)
     full_transcript = Column(Text)
+    status = Column(String(20), default="active")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -304,3 +311,59 @@ class CampaignDocument(Base):
     campaign_id = Column(Integer, ForeignKey("campaigns.id"), unique=True, nullable=False)
     content = Column(Text)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class PlayerReady(Base):
+    __tablename__ = "player_ready"
+
+    id = Column(Integer, primary_key=True, index=True)
+    room_id = Column(Integer, ForeignKey("rooms.id"), nullable=False)
+    character_id = Column(Integer, ForeignKey("characters.id"), nullable=False)
+    is_ready = Column(Boolean, default=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class Encounter(Base):
+    __tablename__ = "encounters"
+
+    id = Column(Integer, primary_key=True, index=True)
+    room_id = Column(Integer, ForeignKey("rooms.id"), nullable=False)
+    map_id = Column(Integer, ForeignKey("campaign_maps.id"))
+    name = Column(String(100))
+    status = Column(String(20), default="pending")
+    current_turn = Column(Integer, default=0)
+    round = Column(Integer, default=1)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    participants = relationship("InitiativeEntry", back_populates="encounter")
+
+
+class InitiativeEntry(Base):
+    __tablename__ = "initiative_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    encounter_id = Column(Integer, ForeignKey("encounters.id"), nullable=False)
+    character_id = Column(Integer, ForeignKey("characters.id"), nullable=False)
+    initiative_roll = Column(Integer)
+    initiative_modifier = Column(Integer, default=0)
+    turn_order = Column(Integer)
+    is_active = Column(Boolean, default=True)
+    hp_remaining = Column(Integer)
+    conditions = Column(JSON, default=list)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    encounter = relationship("Encounter", back_populates="participants")
+    character = relationship("Character")
+
+
+class PlayerResponse(Base):
+    __tablename__ = "player_responses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    encounter_id = Column(Integer, ForeignKey("encounters.id"))
+    room_id = Column(Integer, ForeignKey("rooms.id"))
+    character_id = Column(Integer, ForeignKey("characters.id"), nullable=False)
+    prompt = Column(Text, nullable=False)
+    response = Column(Text)
+    responded = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

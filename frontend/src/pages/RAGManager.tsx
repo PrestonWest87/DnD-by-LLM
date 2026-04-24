@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
-import { FileText, Upload, Search, Book, Sparkles, Settings, Check } from 'lucide-react'
+import { FileText, Upload, Search, Book, Sparkles } from 'lucide-react'
 
 interface CustomRule {
   id: number

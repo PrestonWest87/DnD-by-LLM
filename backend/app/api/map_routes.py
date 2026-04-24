@@ -19,6 +19,7 @@ class MapGenerateRequest(BaseModel):
     name: Optional[str] = "Main Map"
     map_type: str = "dungeon"
     theme: Optional[str] = "standard"
+    algorithm: Optional[str] = "standard"
     width: int = 50
     height: int = 50
     difficulty: str = "medium"
@@ -30,6 +31,7 @@ class EntityCreate(BaseModel):
     entity_type: str
     x: int
     y: int
+    character_id: Optional[int] = None
 
 
 class EntityResponse(BaseModel):
@@ -78,7 +80,8 @@ async def generate_map(
         width=request.width,
         height=request.height,
         difficulty=request.difficulty,
-        seed=request.seed
+        seed=request.seed,
+        algorithm=request.algorithm
     )
 
     db_map = CampaignMap(
@@ -94,6 +97,22 @@ async def generate_map(
     await db.refresh(db_map)
 
     return db_map
+
+
+@router.get("/themes")
+async def get_available_themes():
+    """Get available dungeon themes"""
+    return {
+        "dungeon": list(MapGenerator.DUNGEON_THEMES.keys()),
+        "wilderness": list(MapGenerator.WILDERNESS_BIOMES.keys()),
+        "settlement": list(MapGenerator.SETTLEMENT_TYPES.keys()),
+        "algorithms": {
+            "standard": "Random room placement with corridors",
+            "bsp": "Binary space partitioning - more evenly distributed rooms",
+            "caverns": "Cellular automata - organic cave-like structures",
+            "roguelike": "Dense room placement with minimum spacing"
+        }
+    }
 
 
 @router.get("/campaign/{campaign_id}")
