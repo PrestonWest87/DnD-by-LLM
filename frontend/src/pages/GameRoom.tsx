@@ -4,8 +4,7 @@ import api from '../lib/api'
 import { useAuthStore } from '../lib/store'
 import { 
   Send, Dices, User, MessageSquare, Sword, Shield, Zap, Users,
-  ChevronDown, ChevronUp, Heart, Activity, Footprints, Sparkles,
-  RotateCcw
+  ChevronDown, Heart, Activity, Sparkles
 } from 'lucide-react'
 
 interface Message {
@@ -61,7 +60,6 @@ export default function GameRoom() {
   const [chatMode, setChatMode] = useState<ChatMode>('action')
   const [error, setError] = useState<string | null>(null)
   const [encounter, setEncounter] = useState<Encounter | null>(null)
-  const [muted, setMuted] = useState(false)
   const [isReady, setIsReady] = useState(false)
   const [currentMap, setCurrentMap] = useState<any>(null)
   const [mapEntities, setMapEntities] = useState<any[]>([])
@@ -147,172 +145,83 @@ export default function GameRoom() {
 
   // Auto-select user's character when either characters or user changes
   useEffect(() => {
-    if (currentUser && characters.length > 0 && !selectedChar) {
-      const userChars = characters.filter((c: Character) => c.user_id === currentUser.id)
-      if (userChars.length > 0) {
-        setSelectedChar(userChars[0].id)
-      } else {
-        setSelectedChar(characters[0].id)
-      }
+    if (characters.length > 0 && !selectedChar && currentUser) {
+      const userChar = characters.find(c => c.user_id === currentUser.id)
+      if (userChar) setSelectedChar(userChar.id)
     }
-  }, [currentUser, characters, selectedChar])
-
-  const getMessageType = (): string => {
-    switch (chatMode) {
-      case 'speak': return 'speak'
-      case 'party': return 'party'
-      case 'action': return 'action'
-      default: return 'player'
-    }
-  }
+  }, [characters, currentUser, selectedChar])
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!input.trim()) return
+    if (!input.trim() || !selectedChar) return
 
-    const userMsg: Message = {
-      id: Date.now(),
-      user_id: 0,
-      character_id: selectedChar || undefined,
-      content: input,
-      message_type: getMessageType(),
-      timestamp: new Date().toISOString()
-    }
-    setMessages(prev => [...prev, userMsg])
     setLoading(true)
     setInput('')
-    
+
     try {
       if (chatMode === 'dm') {
-        const response = await api.post(`/dm/chat`, {
+        const response = await api.post('/dm/chat', {
           room_id: roomId,
           player_input: input,
           character_id: selectedChar
         })
-        const dmMessage: Message = {
-          id: Date.now() + 1,
-          user_id: 0,
-          content: response.data.response,
-          message_type: 'dm',
-          timestamp: new Date().toISOString()
-        }
-        setMessages(prev => [...prev, dmMessage])
-        
-        await api.post(`/rooms/${roomId}/messages`, {
-          content: input,
-          message_type: 'player',
-          character_id: selectedChar
-        })
-        await api.post(`/rooms/${roomId}/messages`, {
-          content: response.data.response,
-          message_type: 'dm',
-          character_id: null
-        })
+        await loadMessages()
       } else {
         await api.post(`/rooms/${roomId}/messages`, {
           content: input,
-          message_type: getMessageType(),
+          message_type: chatMode,
           character_id: selectedChar
         })
         await loadMessages()
       }
-    } catch (err) {
-      console.error(err)
-      setError('Failed to send message')
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to send message')
     } finally {
       setLoading(false)
     }
   }
 
-  const rollDice = async () => {
-    try {
-      const response = await api.post('/dice/roll', [{
-        dice: diceInput,
-        modifier: 0,
-        advantage: false,
-        disadvantage: false
-      }])
-      setDiceResults(response.data)
-    } catch (err) {
-      console.error(err)
-    }
-  }
-
   const getMessageStyle = (msg: Message) => {
     switch (msg.message_type) {
-      case 'dm': 
-        return 'border-l-4 border-l-purple-500 bg-purple-900/20'
-      case 'party': 
-        return 'border-l-4 border-l-yellow-500 bg-yellow-900/10'
-      case 'speak': 
-        return 'border-l-4 border-l-blue-500 italic bg-blue-900/10'
-      case 'action': 
-        return 'border-l-4 border-l-primary'
-      case 'narrator':
-        return 'border-l-4 border-l-cyan-500 bg-cyan-900/10'
-      case 'whisper':
-        return 'border-l-4 border-l-pink-500 bg-pink-900/10'
-      default: 
-        return 'border-l-4 border-l-gray-500'
+      case 'action': return 'bg-surfaceHover border-l-4 border-purple-500'
+      case 'speak': return 'bg-surfaceHover border-l-4 border-blue-500'
+      case 'party': return 'bg-surfaceHover border-l-4 border-green-500'
+      case 'dm': return 'bg-primary/10 border-l-4 border-primary'
+      default: return 'bg-surfaceHover'
     }
   }
 
   const getMessageIcon = (msg: Message) => {
     switch (msg.message_type) {
-      case 'dm': return <Sparkles className="w-3 h-3 text-purple-400" />
-      case 'action': return <Sword className="w-3 h-3 text-primary" />
+      case 'action': return <Sword className="w-3 h-3 text-purple-400" />
       case 'speak': return <MessageSquare className="w-3 h-3 text-blue-400" />
-      case 'party': return <Users className="w-3 h-3 text-yellow-400" />
-      default: return <User className="w-3 h-3 text-gray-400" />
+      case 'party': return <Users className="w-3 h-3 text-green-400" />
+      case 'dm': return <Sparkles className="w-3 h-3 text-primary" />
+      default: return null
     }
   }
 
   const getMessageLabel = (msg: Message) => {
     switch (msg.message_type) {
-      case 'dm': return 'The DM'
-      case 'party': return 'Party'
-      case 'speak': return 'Said'
       case 'action': return 'Action'
-      case 'narrator': return 'Narrator'
-      case 'whisper': return 'Whisper'
-      case 'dice': return 'Dice Roll'
-      case 'system': return 'System'
+      case 'speak': return 'Says'
+      case 'party': return 'Party'
+      case 'dm': return 'DM'
       default: return 'Player'
     }
   }
 
-  const formatMessageContent = (content: string) => {
+  const formatMessage = (content: string) => {
     let formatted = content
-    
-    formatted = formatted.replace(/\[?(\d+)d(\d+)([+-]\d+)?\s*=\s*(\d+)\]?/g, (_, count, die, mod, result) => {
-      const total = parseInt(result)
-      const isCrit = parseInt(die) === 20 && parseInt(count) === 1 && (total === 20 || total === 1)
-      const isFail = parseInt(count) === 1 && parseInt(die) === 20 && total === 1
-      let color = 'text-purple-400'
-      if (isCrit) color = 'text-yellow-400'
-      else if (isFail) color = 'text-red-400'
-      else if (total >= 15) color = 'text-green-400'
-      else if (total >= 10) color = 'text-yellow-400'
-      else color = 'text-red-400'
-      return `<span class="${color} font-bold">${count}d${die}${mod || ''} = ${result}</span>`
-    })
-
-    formatted = formatted.replace(/(HP|hp):\s*(\d+)\/(\d+)/g, '<span class="text-green-400">$1: $2/$3</span>')
-    formatted = formatted.replace(/(restored|healed|gained)\s+(\d+)\s+(HP|hp)/gi, '<span class="text-green-400">$1 $2 $3</span>')
-    formatted = formatted.replace(/(lost|take[sd]?|damage[sd]?)\s+(\d+)\s+(HP|hp)/gi, '<span class="text-red-400">$1 $2 $3</span>')
     formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong class="text-white">$1</strong>')
     formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>')
-    formatted = formatted.replace(/__(.*?)__/g, '<u>$1</u>')
     formatted = formatted.replace(/`(.*?)`/g, '<code class="bg-gray-800 px-1 rounded text-purple-300">$1</code>')
-
     return formatted
   }
 
   const selectedCharacter = characters.find(c => c.id === selectedChar)
-
   const getCharacterById = (id: number) => characters.find(c => c.id === id)
 
-  // Calculate HP percentage for progress bar
   const getHpPercent = (current: number, max: number) => {
     if (!max) return 0
     return Math.max(0, Math.min(100, (current / max) * 100))
@@ -486,7 +395,7 @@ export default function GameRoom() {
                 <span className="font-medium">{getMessageLabel(msg)}</span>
                 {msg.character_id && (
                   <span className="text-primary">
-                    • {getCharacterById(msg.character_id)?.name || 'Unknown'}
+                    {' '}{getCharacterById(msg.character_id)?.name || 'Unknown'}
                   </span>
                 )}
               </div>
@@ -496,6 +405,16 @@ export default function GameRoom() {
               />
             </div>
           ))}
+          {loading && (
+            <div className="flex items-center gap-2 text-textMuted p-4">
+              <div className="flex gap-1">
+                <span className="w-2 h-2 bg-primary rounded-full animate-bounce"></span>
+                <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></span>
+                <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></span>
+              </div>
+              <span className="text-sm">The DM is thinking...</span>
+            </div>
+          )}
           <div ref={messagesEndRef} />
         </div>
 
@@ -544,183 +463,6 @@ export default function GameRoom() {
           </form>
         </div>
       </div>
-    </div>
-  )
-                    • {getCharacterById(msg.character_id)?.name || 'Unknown'}
-                  </span>
-                )}
-              </div>
-              <div 
-                className="text-sm leading-relaxed"
-                dangerouslySetInnerHTML={{ __html: formatMessageContent(msg.content) }}
-              />
-              <div className="text-xs text-textMuted mt-2 opacity-60">
-                {new Date(msg.timestamp).toLocaleTimeString()}
-              </div>
-            </div>
-          ))}
-          {loading && (
-            <div className="flex items-center gap-2 text-textMuted p-4">
-              <div className="flex gap-1">
-                <span className="w-2 h-2 bg-primary rounded-full animate-bounce"></span>
-                <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></span>
-                <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></span>
-              </div>
-              <span className="text-sm">The DM is thinking...</span>
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-      </div>
-    </div>
-  )
-}
-                <option key={char.id} value={char.id}>
-                  {char.name} (L{char.level} {char.race} {char.class_name})
-                </option>
-              ))}
-            </select>
-            
-            {selectedCharacter && (
-              <div className="space-y-3">
-                {/* HP Bar */}
-                <div>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="flex items-center gap-1 text-textMuted">
-                      <Heart className="w-3 h-3" /> HP
-                    </span>
-                    <span className="text-green-400 font-medium">
-                      {selectedCharacter.hp}/{selectedCharacter.max_hp}
-                    </span>
-                  </div>
-                  <div className="stat-bar">
-                    <div 
-                      className={`stat-bar-fill ${getHpColor(selectedCharacter.hp, selectedCharacter.max_hp)}`}
-                      style={{ width: `${getHpPercent(selectedCharacter.hp, selectedCharacter.max_hp)}%` }}
-                    />
-                  </div>
-                </div>
-                
-                {/* Stats Grid */}
-                <div className="grid grid-cols-3 gap-2 text-xs">
-                  <div className="bg-surfaceHover p-2 rounded-lg text-center">
-                    <div className="flex items-center justify-center gap-1 text-textMuted mb-1">
-                      <Shield className="w-3 h-3" /> AC
-                    </div>
-                    <div className="text-blue-400 font-bold text-lg">{selectedCharacter.ac}</div>
-                  </div>
-                  <div className="bg-surfaceHover p-2 rounded-lg text-center">
-                    <div className="flex items-center justify-center gap-1 text-textMuted mb-1">
-                      <Activity className="w-3 h-3" /> Level
-                    </div>
-                    <div className="text-primary font-bold text-lg">{selectedCharacter.level}</div>
-                  </div>
-                  <div className="bg-surfaceHover p-2 rounded-lg text-center">
-                    <div className="flex items-center justify-center gap-1 text-textMuted mb-1">
-                      <Footprints className="w-3 h-3" /> Speed
-                    </div>
-                    <div className="text-accent font-bold text-lg">30</div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Dice Roller */}
-          <div className="p-4 border-b border-border">
-            <button 
-              onClick={() => setShowDice(!showDice)} 
-              className="flex items-center gap-2 w-full"
-            >
-              <Dices className="w-4 h-4 text-accent" />
-              <span className="font-semibold flex-1 text-left">Dice Roller</span>
-              {showDice ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </button>
-            {showDice && (
-              <div className="mt-3 space-y-3">
-                <input
-                  type="text"
-                  value={diceInput}
-                  onChange={(e) => setDiceInput(e.target.value)}
-                  placeholder="1d20+5"
-                  className="input text-center font-mono"
-                />
-                <div className="flex gap-2">
-                  <button onClick={rollDice} className="btn-primary flex-1">
-                    Roll
-                  </button>
-                  <button 
-                    onClick={() => setDiceInput('1d20')} 
-                    className="btn-secondary px-3"
-                    title="Reset"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                  </button>
-                </div>
-                {diceResults.length > 0 && (
-                  <div className="text-center py-3 bg-surfaceHover rounded-lg">
-                    <div className="text-4xl font-bold text-accent glow-gold">
-                      {diceResults[0].total}
-                    </div>
-                    <div className="text-xs text-textMuted mt-1">
-                      {diceResults[0].rolls.join(' + ')}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Initiative Panel */}
-          <div className="p-4 border-b border-border">
-            <button 
-              onClick={() => setShowInitiative(!showInitiative)} 
-              className="flex items-center gap-2 w-full"
-            >
-              <Zap className="w-4 h-4 text-yellow-400" />
-              <span className="font-semibold flex-1 text-left">Initiative</span>
-              {showInitiative ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </button>
-            {showInitiative && (
-              <div className="mt-3 space-y-2">
-                {encounter ? (
-                  <>
-                    <div className="text-xs text-textMuted mb-2">
-                      Round {encounter.round} • Turn {encounter.current_turn}
-                    </div>
-                    {encounter.participants?.map((p) => (
-                      <div 
-                        key={p.id}
-                        className={`p-2 rounded-lg flex items-center justify-between ${
-                          p.turn_order === encounter.current_turn 
-                            ? 'bg-primary/20 border border-primary' 
-                            : 'bg-surfaceHover'
-                        }`}
-                      >
-                        <span className="text-sm">
-                          {getCharacterById(p.character_id)?.name || 'Unknown'}
-                        </span>
-                        <span className="text-xs text-textMuted">
-                          {p.hp_remaining} HP
-                        </span>
-                      </div>
-                    ))}
-                  </>
-                ) : (
-                  <div className="text-center py-4 text-textMuted text-sm">
-                    No active encounter
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Error Display */}
-          {error && (
-            <div className="p-4 text-danger text-sm">{error}</div>
-          )}
-        </div>
-      )}
     </div>
   )
 }
