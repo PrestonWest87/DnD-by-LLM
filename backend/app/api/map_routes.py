@@ -187,6 +187,45 @@ async def explore_cell(
     return {"explored": True}
 
 
+@router.get("/{map_id}/entities")
+async def get_entities(
+    map_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(CampaignMap).where(CampaignMap.id == map_id))
+    map_data = result.scalar_one_or_none()
+    if not map_data:
+        raise HTTPException(status_code=404, detail="Map not found")
+
+    member = await db.execute(
+        select(CampaignMember).where(
+            CampaignMember.campaign_id == map_data.campaign_id,
+            CampaignMember.user_id == current_user.id
+        )
+    )
+    if not member.scalar_one_or_none():
+        raise HTTPException(status_code=403, detail="Not a campaign member")
+
+    entities = await db.execute(
+        select(MapEntity).where(MapEntity.map_id == map_id)
+    )
+
+    return {
+        "entities": [
+            {
+                "id": e.id,
+                "name": e.name,
+                "entity_type": e.entity_type,
+                "x": e.x,
+                "y": e.y,
+                "visible": e.visible
+            }
+            for e in entities.scalars().all()
+        ]
+    }
+
+
 @router.post("/{map_id}/entities")
 async def add_entity(
     map_id: int,
