@@ -236,8 +236,8 @@ export default function GameRoom() {
 
   return (
     <div className="flex flex-1 min-h-0 bg-surface overflow-hidden">
-      {/* Map Area - 80% */}
-      <div className="flex-[4] border-r border-border relative overflow-hidden">
+      {/* Map Area - 85% */}
+      <div className="flex-[17] border-r border-border relative overflow-hidden">
         <div className="absolute inset-0 p-2">
           <div 
             className="w-full h-full relative rounded-lg overflow-hidden"
@@ -299,7 +299,7 @@ export default function GameRoom() {
             
             {/* Map name overlay */}
             <div className="absolute top-2 left-2 bg-black/60 px-3 py-1 rounded text-white text-sm">
-              {currentMap?.name || 'No Map Loaded'}
+              {currentMap?.name || 'No Map - Click Ready to Generate'}
             </div>
           </div>
         </div>
@@ -315,8 +315,8 @@ export default function GameRoom() {
         </div>
       </div>
       
-      {/* Right Sidebar - 20% */}
-      <div className="flex-1 flex flex-col min-h-0 border-l border-border">
+      {/* Right Sidebar - 15% */}
+      <div className="w-[300px] flex flex-col min-h-0 border-l border-border">
         {/* Character + Ready Button */}
         <div className="p-3 border-b border-border">
           <div className="flex items-center gap-2 mb-2">
